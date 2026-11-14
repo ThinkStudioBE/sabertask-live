@@ -39,32 +39,36 @@ from . import config
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Several mirrors, tried in order. They are run by volunteers and any one of
-# them can be down, rate-limited or unreachable from a given host: the main
-# endpoint refuses the TLS handshake from this machine outright, which looks
+# them can be down, rate-limited or unreachable from a given host, which looks
 # exactly like "no results" if there is nothing to fall back to.
+#
+# Only full-planet instances belong here. A regional extract answers happily
+# and returns nothing for everywhere it does not cover, and that is worse than
+# a server being down: an empty list reads as "this city has no cleaning
+# companies". Override the list with OVERPASS_URLS to point at one deliberately
+# (overpass.osm.ch carries Switzerland, and is reachable from some hosts these
+# three refuse).
 OVERPASS_URLS = [
     url.strip() for url in os.getenv(
         "OVERPASS_URLS",
         "https://overpass-api.de/api/interpreter,"
         "https://overpass.kumi.systems/api/interpreter,"
-        "https://overpass.private.coffee/api/interpreter,"
-        # Last, and only useful for Switzerland: this instance carries a Swiss
-        # extract rather than the planet. It stays in the list because it is
-        # reachable from hosts the three above refuse, which makes it the one
-        # mirror that can prove the pipeline end to end when they are blocked.
-        "https://overpass.osm.ch/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
     ).split(",") if url.strip()
 ]
 # OSM asks automated clients to identify themselves. A product name, never a
 # person's address.
 USER_AGENT = "SabertaskSales/1.0 (+https://www.sabertask.com)"
-OVERPASS_TIMEOUT = 15
+# Overpass is free and queues: a busy endpoint accepts the connection and then
+# says nothing until a slot frees. Fifteen seconds is a demo's patience and it
+# throws away answers that were on their way, so this build waits properly.
+OVERPASS_TIMEOUT = 45
 # How long the whole map phase may take before the search gives up. Generous,
 # because there is nothing to fall back on here: an empty list is the honest
 # answer and a slow one beats a wrong one. It has to cover every mirror in the
 # list being unreachable in turn, or the one that would have answered is never
 # reached.
-MAP_BUDGET = 90
+MAP_BUDGET = 150
 HTTP_TIMEOUT = 15
 
 MAX_CITIES = 3
@@ -107,7 +111,6 @@ DEFAULT_CITIES = {
     "DK": ["Kobenhavn", "Aarhus", "Odense"],
     "SE": ["Stockholm", "Goteborg", "Malmo"],
     "NO": ["Oslo", "Bergen", "Trondheim"],
-    "CH": ["Zurich", "Basel", "Bern"],
 }
 
 PLACE_TYPES = ("city", "town", "municipality", "village", "suburb")
@@ -137,7 +140,7 @@ CRITERIA_SYSTEM = (
     '{"segments": ["cleaning"], "countries": ["BE","NL"], "cities": ["Antwerpen"], '
     '"summary": "one sentence naming what is being looked for"}\n\n'
     "segments must come from: cleaning, window, landscaping, facility, winter, "
-    "municipal. countries from: BE, NL, LU, DK, SE, NO, CH. Give at most three "
+    "municipal. countries from: BE, NL, LU, DK, SE, NO. Give at most three "
     "cities, real ones, spelled as the locals write them without accents. If the "
     "brief names no city, leave cities empty. If the brief names no country, "
     "leave countries empty. Never invent a segment that is not in the list: pick "

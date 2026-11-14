@@ -147,7 +147,6 @@ COUNTRIES = [
     {"key": "DK", "label": "Denmark", "flag": "\U0001F1E9\U0001F1F0"},
     {"key": "SE", "label": "Sweden", "flag": "\U0001F1F8\U0001F1EA"},
     {"key": "NO", "label": "Norway", "flag": "\U0001F1F3\U0001F1F4"},
-    {"key": "CH", "label": "Switzerland", "flag": "\U0001F1E8\U0001F1ED"},
 ]
 COUNTRY_LABEL = {c["key"]: c["label"] for c in COUNTRIES}
 COUNTRY_FLAG = {c["key"]: c["flag"] for c in COUNTRIES}
