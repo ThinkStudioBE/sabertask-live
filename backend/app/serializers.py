@@ -8,7 +8,7 @@ it, so no screen can quote a different number than another.
 from datetime import date, datetime
 from typing import Optional
 
-from . import config
+from . import config, settings_store
 from .models import Client, Company, Contact, Deal, Meeting, Note, Quote, Task, User
 
 
@@ -100,8 +100,8 @@ def company_dict(company: Company, owner: Optional[User] = None, extra=None):
         "segment_short": config.SEGMENT_SHORT.get(company.segment or "", ""),
         "segment_color": config.SEGMENT_COLOR.get(company.segment or "", "#94a3b8"),
         "country": company.country,
-        "country_label": config.COUNTRY_LABEL.get(company.country or "", ""),
-        "flag": config.COUNTRY_FLAG.get(company.country or "", ""),
+        "country_label": settings_store.country_label(company.country or ""),
+        "flag": settings_store.country_flag(company.country or ""),
         "city": company.city,
         "size_band": company.size_band,
         "size_label": config.SIZE_LABEL.get(company.size_band or "", ""),
@@ -142,7 +142,7 @@ def deal_dict(deal: Deal, company: Optional[Company] = None,
         "company_id": deal.company_id,
         "company": company.name if company else None,
         "country": company.country if company else None,
-        "flag": config.COUNTRY_FLAG.get((company.country if company else "") or "", ""),
+        "flag": settings_store.country_flag((company.country if company else "") or ""),
         "city": company.city if company else None,
         "segment": company.segment if company else None,
         "segment_label": config.SEGMENT_LABEL.get((company.segment if company else "") or "", ""),
@@ -271,7 +271,7 @@ def client_dict(client: Client, company: Optional[Company] = None,
         "deal_id": client.deal_id,
         "company": company.name if company else None,
         "country": company.country if company else None,
-        "flag": config.COUNTRY_FLAG.get((company.country if company else "") or "", ""),
+        "flag": settings_store.country_flag((company.country if company else "") or ""),
         "city": company.city if company else None,
         "segment": company.segment if company else None,
         "segment_label": config.SEGMENT_LABEL.get((company.segment if company else "") or "", ""),

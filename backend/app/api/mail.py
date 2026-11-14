@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .. import config
+from .. import config, settings_store
 from ..auth import current_user
 from ..db import get_session
 from ..models import Company, Contact, Deal, MailDraft, Note, User
@@ -50,7 +50,7 @@ def _row(deal: Deal, company: Company, owner: Optional[User],
         "company_id": company.id,
         "company": company.name,
         "city": company.city,
-        "flag": config.COUNTRY_FLAG.get(company.country or "", ""),
+        "flag": settings_store.country_flag(company.country or ""),
         "segment": company.segment,
         "segment_short": config.SEGMENT_SHORT.get(company.segment or "", ""),
         "segment_color": config.SEGMENT_COLOR.get(company.segment or "", "#94a3b8"),

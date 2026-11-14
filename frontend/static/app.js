@@ -39,16 +39,26 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
+/* Every amount the API sends is in the base currency. It is converted here, at
+   the last possible moment, so switching what you read the pipeline in never
+   touches what is stored or what anybody else sees. */
+function fx() {
+  return (state.meta && state.meta.currency)
+    || { per_base: 1, symbol: 'kr' };
+}
+
 function money(amount) {
-  var whole = Math.round(amount || 0);
-  return whole.toLocaleString('da-DK').replace(/,/g, '.') + ' kr';
+  var rate = fx();
+  var whole = Math.round((amount || 0) * rate.per_base);
+  return whole.toLocaleString('da-DK').replace(/,/g, '.') + ' ' + rate.symbol;
 }
 
 function moneyShort(amount) {
-  var n = Math.round(amount || 0);
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.', ',') + 'M kr';
-  if (n >= 1000) return Math.round(n / 1000) + 'k kr';
-  return n + ' kr';
+  var rate = fx();
+  var n = Math.round((amount || 0) * rate.per_base);
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.', ',') + 'M ' + rate.symbol;
+  if (n >= 1000) return Math.round(n / 1000) + 'k ' + rate.symbol;
+  return n + ' ' + rate.symbol;
 }
 
 function api(path, options) {
@@ -139,7 +149,8 @@ var NAV = [
   { key: 'leads', label: 'Leads', icon: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>' },
   { key: 'mail', label: 'Cold mail', icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>' },
   { key: 'clients', label: 'Clients', icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
-  { key: 'reports', label: 'Reports', icon: '<path d="M3 3v18h18M7 15l4-5 3 3 5-7"/>' }
+  { key: 'reports', label: 'Reports', icon: '<path d="M3 3v18h18M7 15l4-5 3 3 5-7"/>' },
+  { key: 'settings', label: 'Settings', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.37.65.67.86.3.2.65.32 1 .33H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' }
 ];
 
 function renderRail() {
@@ -406,6 +417,64 @@ function viewCompanies() {
 
 /* ---------------------------------------------------------------- CLIENTS */
 
+/* --------------------------------------------------------------- SETTINGS */
+
+/* Two settings, and they are different kinds of thing. The countries belong to
+   the installation and decide where a search may look: add one here and the
+   next search can use it, which is the point. The currency belongs to the
+   person reading the screen and changes nothing anybody else sees. */
+function viewSettings() {
+  var data = state.data.settings;
+  if (!data) return '<div class="view"><div class="empty">Loading</div></div>';
+  var cur = data.currency;
+
+  var html = '<div class="view">';
+
+  html += '<div class="panel" style="margin-bottom:14px">'
+    + '<h3 style="margin:0 0 4px">Countries to search</h3>'
+    + '<div class="co-sub" style="margin-bottom:14px">A search looks only in '
+    + 'these. Add one and it works straight away, no restart and nothing to '
+    + 'deploy. A search returns at most ' + data.lead_cap_per_country
+    + ' leads per country, counted over every industry in that search, so the '
+    + 'total grows with the number of countries you pick.</div>'
+    + '<div class="set-chips">';
+  data.countries.forEach(function (row) {
+    html += '<span class="set-chip">' + esc(row.flag) + ' ' + esc(row.label)
+      + ' <span class="co-sub" style="margin:0">' + esc(row.key) + '</span>'
+      + (row.in_use ? '<span class="chip-count">' + row.in_use + '</span>' : '')
+      + '<button class="chip-x" data-act="country-remove" data-code="' + esc(row.key)
+      + '" title="Remove ' + esc(row.label) + '">&times;</button></span>';
+  });
+  html += '</div>'
+    + '<div class="set-add">'
+    + '<input id="c-code" class="set-inp" style="max-width:90px" placeholder="IE" maxlength="2">'
+    + '<input id="c-name" class="set-inp" placeholder="Ireland">'
+    + '<button class="btn primary sm" data-act="country-add">Add country</button>'
+    + '</div>'
+    + '<div class="co-sub">Two-letter country code. Records already found in a '
+    + 'country stay when you remove it: they are real companies.</div>'
+    + '</div>';
+
+  html += '<div class="panel">'
+    + '<h3 style="margin:0 0 4px">Your reporting currency</h3>'
+    + '<div class="co-sub" style="margin-bottom:14px">Everything is stored in '
+    + esc(cur.base) + ' and converted for you here, so your colleagues keep '
+    + 'reading the same pipeline in theirs.</div>'
+    + '<div class="set-chips">';
+  cur.options.forEach(function (option) {
+    html += '<button class="set-chip' + (option.key === cur.current ? ' on' : '')
+      + '" data-act="currency" data-code="' + esc(option.key) + '">'
+      + esc(option.label) + ' <span class="co-sub" style="margin:0">'
+      + esc(option.symbol) + '</span></button>';
+  });
+  html += '</div>'
+    + '<div class="co-sub">Rates are fixed for the trial, as of '
+    + esc(cur.as_of) + '. They are not live.</div>'
+    + '</div>';
+
+  return html + '</div>';
+}
+
 /* ------------------------------------------------------------- FIND LEADS */
 
 /* A brief in plain words, then real companies off the map: name, address,
@@ -436,7 +505,8 @@ function viewLeads() {
     + '>' + (state.leadSearching ? 'Searching' : 'Search') + '</button>'
     + '</div>'
     + '<div class="co-sub">Name an industry and a city or a country. '
-    + 'A search returns at most ' + (data.limit || 100) + ' leads.</div>';
+    + 'A search returns at most ' + (data.cap_per_country || 50)
+    + ' leads per country, across all industries in that search.</div>';
   if (state.leadResult) {
     var r = state.leadResult;
     html += '<div class="lead-result">' + r.shown + ' on the list for '
@@ -444,7 +514,10 @@ function viewLeads() {
       + esc((r.criteria.cities || []).join(', '))
       + (r.already_known ? ' &middot; ' + r.already_known + ' already known' : '')
       + (r.capped
-          ? ' &middot; the map had more, this run stopped at the ' + r.limit + ' cap'
+          ? ' &middot; the map had more, this run stopped at ' + r.limit + ' per country'
+          : '')
+      + ((r.skipped && r.skipped.length)
+          ? ' &middot; not reached in time: ' + esc(r.skipped.join(', '))
           : '')
       + '</div>';
   }
@@ -1205,6 +1278,9 @@ function load() {
       state.data.clients = data;
     }));
   }
+  if (state.nav === 'settings') {
+    jobs.push(api('/api/settings').then(function (data) { state.data.settings = data; }));
+  }
   if (state.nav === 'reports') {
     jobs.push(api('/api/reports').then(function (data) { state.data.reports = data; }));
   }
@@ -1220,7 +1296,8 @@ function load() {
 function paint() {
   var views = {
     today: viewToday, pipeline: viewPipeline, companies: viewCompanies,
-    leads: viewLeads, mail: viewMail, clients: viewClients, reports: viewReports
+    leads: viewLeads, mail: viewMail, clients: viewClients, reports: viewReports,
+    settings: viewSettings
   };
   document.getElementById('view-name').textContent =
     (NAV.filter(function (n) { return n.key === state.nav; })[0] || {}).label || '';
@@ -1228,6 +1305,16 @@ function paint() {
   renderRail();
   renderDesk();
   if (state.nav === 'pipeline' && state.pipelineView === 'board') wireDragDrop();
+}
+
+/* Both settings live in /api/meta as well: the country list drives filters
+   everywhere and the currency drives every amount on screen, so a change to
+   either is pulled back before anything is drawn again. */
+function refreshMeta() {
+  return api('/api/meta').then(function (meta) {
+    state.meta = meta;
+    return load();
+  });
 }
 
 function go(nav) {
@@ -1372,6 +1459,31 @@ document.addEventListener('click', function (event) {
       openDeal(state.drawer.data.deal.id);
       load();
     }).catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'country-add') {
+    var code = document.getElementById('c-code').value.trim();
+    var label = document.getElementById('c-name').value.trim();
+    if (code.length !== 2) { toast('A country code is two letters'); return; }
+    api('/api/settings/countries', { method: 'POST', body: { code: code, label: label || code } })
+      .then(function (row) {
+        toast(row.flag + ' ' + row.label + ' added, searchable now');
+        return refreshMeta();
+      }).catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'country-remove') {
+    api('/api/settings/countries/' + target.dataset.code, { method: 'DELETE' })
+      .then(function () { toast('Removed from the search'); return refreshMeta(); })
+      .catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'currency') {
+    api('/api/settings/currency', { method: 'PATCH', body: { currency: target.dataset.code } })
+      .then(function (block) {
+        toast('Reading in ' + block.current);
+        return refreshMeta();
+      }).catch(function (error) { toast(error.message); });
   }
 
   if (act === 'lead-search') {

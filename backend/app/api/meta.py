@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
-from .. import config
+from .. import config, settings_store
 from ..auth import current_user
 from ..db import get_session
 from ..models import User
@@ -21,9 +21,22 @@ def meta(session: Session = Depends(get_session), user: User = Depends(current_u
             "name": config.APP_NAME,
             "brand": config.BRAND,
             "tagline": config.TAGLINE,
-            "currency": config.CURRENCY,
-            "symbol": config.CURRENCY_SYMBOL,
             "trial_days": config.TRIAL_DAYS,
+            "lead_cap_per_country": config.LEAD_CAP_PER_COUNTRY,
+        },
+        # Amounts travel in the base currency and are converted where they are
+        # drawn, so this block is everything the frontend needs to render money.
+        "currency": {
+            "current": (user.currency or config.BASE_CURRENCY),
+            "symbol": config.CURRENCY_BY_KEY.get(
+                user.currency or config.BASE_CURRENCY,
+                config.CURRENCY_BY_KEY[config.BASE_CURRENCY])["symbol"],
+            "per_base": config.CURRENCY_BY_KEY.get(
+                user.currency or config.BASE_CURRENCY,
+                config.CURRENCY_BY_KEY[config.BASE_CURRENCY])["per_base"],
+            "base": config.BASE_CURRENCY,
+            "as_of": config.FX_DATE,
+            "options": config.CURRENCIES,
         },
         "me": user_dict(user),
         "team": [user_dict(u) for u in team],
@@ -33,7 +46,7 @@ def meta(session: Session = Depends(get_session), user: User = Depends(current_u
         "stage_steps": config.STAGE_NEXT_STEP,
         "segments": config.SEGMENTS,
         "segment_desk": segment_desk(session),
-        "countries": config.COUNTRIES,
+        "countries": settings_store.countries(),
         "size_bands": config.SIZE_BANDS,
         "channels": config.CHANNELS,
         "note_kinds": config.NOTE_KINDS,

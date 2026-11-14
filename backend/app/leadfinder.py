@@ -35,7 +35,7 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-from . import config
+from . import config, settings_store
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Several mirrors, tried in order. They are run by volunteers and any one of
@@ -102,15 +102,18 @@ SECTOR_WORDS = {
                   "vejdrift", "wegen", "public"],
 }
 
-# Somewhere to start when the brief names no city. One per market, chosen for
-# density rather than for being the capital.
-DEFAULT_CITIES = {
+# Somewhere to start when the brief names no city, for the countries we happen
+# to know well. This is a convenience and never a gate: a country that is not
+# in here is searched whole, which is what makes a country added from Settings
+# work in the very next search without a line of code.
+SEED_CITIES = {
     "BE": ["Antwerpen", "Gent", "Brussel"],
     "NL": ["Rotterdam", "Utrecht", "Amsterdam"],
     "LU": ["Luxembourg", "Esch-sur-Alzette"],
     "DK": ["Kobenhavn", "Aarhus", "Odense"],
     "SE": ["Stockholm", "Goteborg", "Malmo"],
     "NO": ["Oslo", "Bergen", "Trondheim"],
+    "FI": ["Helsinki", "Tampere", "Turku"],
 }
 
 PLACE_TYPES = ("city", "town", "municipality", "village", "suburb")
@@ -153,11 +156,12 @@ def _keyword_criteria(brief: str) -> dict:
     text = (brief or "").lower()
     segments = [key for key, words in SECTOR_WORDS.items()
                 if any(word.strip() in text for word in words)]
-    countries = [code for code in DEFAULT_CITIES
-                 if code.lower() in text.split() or
-                 config.COUNTRY_LABEL.get(code, "").lower() in text]
+    live = settings_store.countries()
+    countries = [row["key"] for row in live
+                 if row["key"].lower() in text.split()
+                 or row["label"].lower() in text]
     cities = []
-    for code, names in DEFAULT_CITIES.items():
+    for code, names in SEED_CITIES.items():
         for name in names:
             if name.lower() in text:
                 cities.append(name)
@@ -200,7 +204,8 @@ def criteria_from_brief(brief: str) -> dict:
         criteria = _keyword_criteria(brief)
 
     segments = [s for s in criteria.get("segments") or [] if s in SECTOR_TAGS]
-    countries = [c for c in criteria.get("countries") or [] if c in DEFAULT_CITIES]
+    known = set(settings_store.country_codes())
+    countries = [c for c in criteria.get("countries") or [] if c in known]
     cities = [str(c).strip() for c in criteria.get("cities") or [] if str(c).strip()]
     if not segments:
         segments = ["cleaning"]
@@ -258,29 +263,42 @@ def _bbox(place: str, require_place: bool = False) -> Optional[Tuple[tuple, Opti
         best = results[0]
     south, north, west, east = (float(v) for v in best["boundingbox"])
     code = (best.get("address") or {}).get("country_code") or ""
-    code = code.upper() if code.upper() in DEFAULT_CITIES else None
+    code = code.upper() if code.upper() in settings_store.country_codes() else None
     return (south, west, north, east), code
 
 
-def _query(tags: List[str], areas: List[Tuple[str, str, tuple]]) -> str:
-    countries = sorted({country.upper() for _, country, _ in areas})
-    preamble = "".join(
-        'area["ISO3166-1"="' + code + '"]["admin_level"="2"]->.c_' + code.lower() + ';\n'
-        for code in countries
-    )
+def _query(tags: List[str], country: str, boxes: List[tuple]) -> str:
+    """One country's question.
+
+    One query per country rather than one for all of them, because the cap is
+    per country: `out` applies to a whole result set, so a single query across
+    three countries could come back as fifty leads from one of them and none
+    from the other two.
+
+    Each clause is intersected with the real border as well as any bounding
+    box. A box is a rectangle and a country is not, so a box drawn round a
+    border city reaches into its neighbours, and everything caught there would
+    be filed under the country we asked for rather than the one it is in.
+    """
+    code = country.upper()
+    area = "c_" + code.lower()
+    preamble = 'area["ISO3166-1"="' + code + '"]["admin_level"="2"]->.' + area + ";\n"
     clauses = ""
     for tag in tags:
         key, _, value = tag.partition("=")
         selector = '["' + key.strip() + '"="' + value.strip() + '"]'
-        for _city, country, box in areas:
-            clauses += ("  nwr" + selector + "(area.c_" + country.lower() + ")("
-                        + ",".join("%.6f" % v for v in box) + ");\n")
-    # The cap is part of the question, not something applied to the answer.
-    # Asking Overpass for everything in three cities and keeping a hundred rows
-    # makes a volunteer server do all the work for nothing.
+        if boxes:
+            for box in boxes:
+                clauses += ("  nwr" + selector + "(area." + area + ")("
+                            + ",".join("%.6f" % v for v in box) + ");\n")
+        else:
+            # No city named and none on file: the whole country. The cap is
+            # what keeps that sane, and it is in the query rather than applied
+            # to the answer so the server never does work we throw away.
+            clauses += "  nwr" + selector + "(area." + area + ");\n"
     return ("[out:json][timeout:" + str(OVERPASS_TIMEOUT) + "];\n" + preamble
             + "(\n" + clauses + ");\n"
-            + "out tags center " + str(config.LEAD_HARD_CAP) + ";\n")
+            + "out tags center " + str(config.LEAD_CAP_PER_COUNTRY) + ";\n")
 
 
 def _curl(url: str, query: str, budget: float) -> Optional[dict]:
@@ -451,118 +469,157 @@ def _clean(value: Optional[str]) -> Optional[str]:
     return value[:300] or None
 
 
+def _plan(criteria: dict) -> List[Tuple[str, List[str]]]:
+    """[(country, [city, ...])], where an empty city list means the whole country.
+
+    A city the brief names is placed by the geocoder rather than by us, and a
+    country nobody has written seed cities for is searched whole. That is what
+    lets a country added from Settings work in the very next search.
+    """
+    by_country = {}
+    order = []
+
+    for city in criteria["cities"]:
+        by_country.setdefault(None, [])
+        if city not in by_country[None]:
+            by_country[None].append(city)
+        if None not in order:
+            order.append(None)
+
+    if not order:
+        for code in criteria["countries"]:
+            order.append(code)
+            by_country[code] = list(SEED_CITIES.get(code, []))[:MAX_CITIES]
+
+    return [(code, by_country[code]) for code in order]
+
+
 def search(brief: str) -> Tuple[dict, List[dict]]:
     """(criteria, leads). Raises SearchFailed with something a rep can act on."""
     criteria = criteria_from_brief(brief)
     tags = tags_for(criteria["segments"])
-
-    wanted = []
-    for city in criteria["cities"]:
-        wanted.append((city, None))
-    # Only fall back to a market's own cities when the brief named none itself.
-    # Padding a named city out to three means searching places nobody asked for.
-    if not wanted:
-        for code in criteria["countries"]:
-            for city in DEFAULT_CITIES.get(code, []):
-                wanted.append((city, code))
-    seen_city = set()
-    plan = []
-    for city, code in wanted:
-        if city.lower() in seen_city:
-            continue
-        seen_city.add(city.lower())
-        plan.append((city, code))
-        if len(plan) >= MAX_CITIES:
-            break
+    plan = _plan(criteria)
     if not plan:
-        raise SearchFailed("No city to search. Name a city or a country in the brief.")
+        raise SearchFailed("Nothing to search. Name an industry and a city or "
+                           "a country in the brief.", criteria)
 
     if map_is_down():
-        # Resolving cities is only worth doing if something is going to be asked
-        # about them.
-        criteria["searched"] = [city for city, _code in plan]
-        criteria["areas"] = [(city, code or "BE", None) for city, code in plan]
+        criteria["searched"] = [c for _code, cities in plan for c in cities]
+        criteria["areas"] = []
         raise SearchFailed("The map was unreachable a moment ago, so this search "
                            "did not wait for it again.", criteria)
 
-    areas = []
-    for city, code in plan:
-        place = city + (", " + config.COUNTRY_LABEL[code] if code else "")
-        try:
-            found = _bbox(place)
-        except httpx.HTTPError:
-            found = None
-        if found is None and code is None:
-            # The brief named a city the criteria could not place, so try each
-            # market in turn and insist on a settlement.
-            for guess in DEFAULT_CITIES:
-                try:
-                    found = _bbox(city + ", " + config.COUNTRY_LABEL[guess],
-                                  require_place=True)
-                except httpx.HTTPError:
-                    found = None
-                time.sleep(1)   # one Nominatim call a second, guesses included
-                if found is not None:
-                    code = guess
-                    break
-        if found is None:
+    # Resolve every named city to a box and, crucially, to the country the map
+    # says it is in. A box around Zurich filed under Belgium matches nothing,
+    # and an empty answer reads exactly like a city with no companies in it.
+    live = set(settings_store.country_codes())
+    boxes_by_country = {}
+    searched = []
+    for code, cities in plan:
+        if code is not None and not cities:
+            boxes_by_country.setdefault(code, [])
+            searched.append(settings_store.country_label(code, code))
             continue
-        box, resolved = found
-        # What the map says the city is in beats what the brief implied. These
-        # disagree whenever a brief names a city without its country.
-        areas.append((city, resolved or code or "BE", box))
-        time.sleep(1)   # Nominatim asks for no more than one call a second.
+        for city in cities:
+            place = city + (", " + settings_store.country_label(code) if code else "")
+            try:
+                found = _bbox(place)
+            except httpx.HTTPError:
+                found = None
+            if found is None and code is None:
+                for guess in live:
+                    try:
+                        found = _bbox(city + ", " + settings_store.country_label(guess),
+                                      require_place=True)
+                    except httpx.HTTPError:
+                        found = None
+                    time.sleep(1)   # one Nominatim call a second, guesses too
+                    if found is not None:
+                        code = guess
+                        break
+            if found is None:
+                continue
+            box, resolved = found
+            where = resolved or code
+            if where is None:
+                continue
+            boxes_by_country.setdefault(where, []).append(box)
+            searched.append(city)
+            time.sleep(1)   # Nominatim asks for no more than one call a second
 
-    criteria["searched"] = [city for city, _c, _b in areas]
-    criteria["areas"] = areas
+    criteria["searched"] = searched
     criteria["tags"] = tags
-    if not areas:
+    criteria["countries_searched"] = sorted(boxes_by_country)
+    criteria["cap_per_country"] = config.LEAD_CAP_PER_COUNTRY
+    if not boxes_by_country:
         raise SearchFailed("None of those places could be found on the map.", criteria)
 
-    try:
-        elements = _overpass(_query(tags, areas))
-    except SearchFailed as error:
-        error.criteria = criteria
-        raise
+    # One query per country, and the budget is spent in the order they were
+    # asked for: a country that is never reached is reported rather than
+    # silently returning nothing.
+    deadline = time.time() + MAP_BUDGET
+    elements_by_country = {}
+    skipped = []
+    failure = None
+    for code in sorted(boxes_by_country):
+        if time.time() > deadline:
+            skipped.append(code)
+            continue
+        try:
+            elements_by_country[code] = _overpass(_query(tags, code, boxes_by_country[code]))
+        except SearchFailed as error:
+            failure = error
+            skipped.append(code)
+    criteria["skipped_countries"] = skipped
+    if not elements_by_country:
+        if failure is not None:
+            failure.criteria = criteria
+            raise failure
+        raise SearchFailed("No OpenStreetMap server is answering right now.", criteria)
 
     leads = []
-    for element in elements:
-        tags_on = element.get("tags", {})
-        name = _clean(tags_on.get("name"))
-        if not name:
-            continue
-        city = _clean(tags_on.get("addr:city")) or areas[0][0]
-        country = (tags_on.get("addr:country") or "").upper()
-        if country not in DEFAULT_CITIES:
-            country = next((c for town, c, _ in areas
-                            if town.lower() == (city or "").lower()), areas[0][1])
-        street = _clean(tags_on.get("addr:street"))
-        if street and tags_on.get("addr:housenumber"):
-            street = street + " " + str(tags_on["addr:housenumber"])[:12]
+    for code, elements in elements_by_country.items():
+        kept = 0
+        for element in elements:
+            if kept >= config.LEAD_CAP_PER_COUNTRY:
+                break       # a mirror that ignored the cap does not get to
+            tags_on = element.get("tags", {})
+            name = _clean(tags_on.get("name"))
+            if not name:
+                continue
+            city = _clean(tags_on.get("addr:city"))
+            country = (tags_on.get("addr:country") or "").upper()
+            if country not in live:
+                # The query was bounded by this country's own border, so the
+                # country is known even when the record does not carry it.
+                country = code
+            street = _clean(tags_on.get("addr:street"))
+            if street and tags_on.get("addr:housenumber"):
+                street = street + " " + str(tags_on["addr:housenumber"])[:12]
 
-        segment = _segment_for(name, criteria["segments"], element)
-        matched_name = any(word.strip() in name.lower()
-                           for word in SECTOR_WORDS.get(segment, []))
-        matched_tag = any(
-            tags_on.get(tag.partition("=")[0]) == tag.partition("=")[2]
-            for tag in SECTOR_TAGS.get(segment, [])
-        )
-        lead = {
-            "osm_id": str(element.get("type", "")) + "/" + str(element.get("id", "")),
-            "name": name,
-            "segment": segment,
-            "country": country,
-            "city": city,
-            "street": street,
-            "website": _clean(tags_on.get("website") or tags_on.get("contact:website")),
-            "phone": _clean(tags_on.get("phone") or tags_on.get("contact:phone")),
-            "email": _clean(tags_on.get("email") or tags_on.get("contact:email")),
-            "matched_name": matched_name,
-            "matched_tag": matched_tag,
-        }
-        lead["score"] = _score(lead)
-        leads.append(lead)
+            segment = _segment_for(name, criteria["segments"], element)
+            matched_name = any(word.strip() in name.lower()
+                               for word in SECTOR_WORDS.get(segment, []))
+            matched_tag = any(
+                tags_on.get(tag.partition("=")[0]) == tag.partition("=")[2]
+                for tag in SECTOR_TAGS.get(segment, [])
+            )
+            lead = {
+                "osm_id": str(element.get("type", "")) + "/" + str(element.get("id", "")),
+                "name": name,
+                "segment": segment,
+                "country": country,
+                "city": city,
+                "street": street,
+                "website": _clean(tags_on.get("website") or tags_on.get("contact:website")),
+                "phone": _clean(tags_on.get("phone") or tags_on.get("contact:phone")),
+                "email": _clean(tags_on.get("email") or tags_on.get("contact:email")),
+                "matched_name": matched_name,
+                "matched_tag": matched_tag,
+            }
+            lead["score"] = _score(lead)
+            leads.append(lead)
+            kept += 1
 
     leads.sort(key=lambda row: -row["score"])
     return criteria, leads
-

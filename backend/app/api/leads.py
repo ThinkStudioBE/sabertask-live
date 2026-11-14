@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .. import config
+from .. import config, settings_store
 from ..auth import current_user
 from ..db import get_session
 from ..leadfinder import SearchFailed, search
@@ -29,7 +29,7 @@ def _row(lead: Lead) -> dict:
         "segment_short": config.SEGMENT_SHORT.get(lead.segment or "", ""),
         "segment_color": config.SEGMENT_COLOR.get(lead.segment or "", "#94a3b8"),
         "country": lead.country,
-        "flag": config.COUNTRY_FLAG.get(lead.country or "", ""),
+        "flag": settings_store.country_flag(lead.country or ""),
         "city": lead.city,
         "street": lead.street,
         "website": lead.website,
@@ -74,10 +74,19 @@ def run_search(payload: BriefIn, session: Session = Depends(get_session),
     seen = {lead.osm_id for lead in existing}
     fresh = [row for row in found
              if row["osm_id"] not in seen and row["name"].strip().lower() not in known]
-    # The second clamp. The Overpass query already asks for no more than this,
-    # so reaching it here means a mirror ignored the limit, which is exactly the
+    # The second clamp, per country, because that is how the cap is written:
+    # fifty from each country in the search, counted over every industry in it
+    # together. The Overpass query already asks for no more than this, so
+    # reaching it here means a mirror ignored the limit, which is exactly the
     # case a cap written in one place only does not cover.
-    rows = fresh[:config.LEAD_HARD_CAP]
+    per_country = {}
+    rows = []
+    for row in fresh:
+        code = row.get("country") or "??"
+        if per_country.get(code, 0) >= config.LEAD_CAP_PER_COUNTRY:
+            continue
+        per_country[code] = per_country.get(code, 0) + 1
+        rows.append(row)
 
     record = LeadSearch(
         brief=brief, summary=criteria.get("summary") or None,
@@ -110,8 +119,12 @@ def run_search(payload: BriefIn, session: Session = Depends(get_session),
         "found": from_map,
         "shown": landed,
         "already_known": max(0, from_map - len(fresh)),
-        "limit": config.LEAD_HARD_CAP,
-        "capped": from_map >= config.LEAD_HARD_CAP,
+        "limit": config.LEAD_CAP_PER_COUNTRY,
+        "cap_per_country": config.LEAD_CAP_PER_COUNTRY,
+        "countries": criteria.get("countries_searched", []),
+        "skipped": [settings_store.country_label(c)
+                    for c in criteria.get("skipped_countries", [])],
+        "capped": any(n >= config.LEAD_CAP_PER_COUNTRY for n in per_country.values()),
         "criteria": {
             "segments": [config.SEGMENT_SHORT.get(s, s) for s in criteria["segments"]],
             "cities": criteria.get("searched", []) or criteria.get("cities", []),
@@ -177,7 +190,7 @@ def list_leads(status: str = "new", segment: str = "", search_id: Optional[int] 
     for row in rows:
         by_segment[row["segment_short"]] = by_segment.get(row["segment_short"], 0) + 1
     return {"rows": rows, "counts": counts, "by_segment": by_segment,
-            "limit": config.LEAD_HARD_CAP}
+            "cap_per_country": config.LEAD_CAP_PER_COUNTRY}
 
 
 @router.post("/leads/{lead_id}/add")

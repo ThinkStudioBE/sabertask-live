@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .. import config
+from .. import config, settings_store
 from ..auth import current_user
 from ..db import get_session
 from ..models import Client, Company, Contact, Deal, StageEvent, User
@@ -232,7 +232,7 @@ def export_contacts(scope: str = "all", segment: str = "",
         ]))
         writer.writerow([
             contact.email, first, last, company.name,
-            config.COUNTRY_LABEL.get(company.country or "", ""), company.city or "",
+            settings_store.country_label(company.country or ""), company.city or "",
             config.SEGMENT_LABEL.get(company.segment or "", ""),
             config.STAGE_LABEL.get(stage, ""),
             owner.name if owner else "", tags,

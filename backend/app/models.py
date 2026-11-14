@@ -27,6 +27,10 @@ class User(SQLModel, table=True):
     role: str = Field(default="rep")  # rep | manager
     initials: Optional[str] = None
     color: str = Field(default="#4a5cb8")
+    # What this person reads amounts in. Display only: every figure is
+    # stored in the base currency, so two people can read one pipeline in
+    # different money without either of them changing it.
+    currency: str = Field(default="DKK")
     # Which industries this rep owns, as a comma-separated list of SEGMENTS keys.
     # The sales floor is split by industry, so this is what decides where a new
     # lead is routed. A manager leaves it empty and sees everything.

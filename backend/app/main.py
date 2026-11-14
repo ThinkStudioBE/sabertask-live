@@ -12,8 +12,8 @@ from . import config
 from .auth import AuthMiddleware, authenticate, make_session_cookie
 from .db import get_session, init_db
 from .api import (
-    clients, companies, deals, leads, mail, meta, quotes, reports, tasks,
-    transfer,
+    clients, companies, deals, leads, mail, meta, quotes, reports, settings,
+    tasks, transfer,
 )
 from .seed import seed_if_empty
 from .serializers import user_dict
@@ -80,6 +80,7 @@ app.include_router(leads.router)
 app.include_router(mail.router)
 app.include_router(quotes.router)
 app.include_router(reports.router)
+app.include_router(settings.router)
 app.include_router(transfer.router)
 
 

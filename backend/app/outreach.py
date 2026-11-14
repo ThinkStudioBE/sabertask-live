@@ -15,7 +15,7 @@ import os
 import re
 from typing import Optional, Tuple
 
-from . import config
+from . import config, settings_store
 
 # What the mail leans on per industry: the one thing that sector loses sleep
 # over, written the way a rep would say it rather than as a feature.
@@ -81,7 +81,7 @@ def facts_for(company, deal, contact, rep) -> dict:
     return {
         "company": company.name,
         "city": company.city or "",
-        "country": config.COUNTRY_LABEL.get(company.country or "", company.country or ""),
+        "country": settings_store.country_label(company.country or "", company.country or ""),
         "segment": company.segment,
         "segment_label": config.SEGMENT_LABEL.get(company.segment, company.segment),
         "field_staff": company.field_staff or 0,

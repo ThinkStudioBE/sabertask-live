@@ -574,3 +574,22 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
   .spinner { animation: none; border-top-color: var(--brand-100);
              background: var(--brand-50); }
 }
+
+/* ---------------------------------------------------------------- settings */
+.set-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.set-chip { display: inline-flex; align-items: center; gap: 7px;
+            border: 1px solid var(--line); border-radius: 999px;
+            padding: 6px 7px 6px 13px; background: #fff; font-size: 13px;
+            font-weight: 600; font-family: inherit; color: inherit; }
+button.set-chip { cursor: pointer; padding: 7px 14px; }
+button.set-chip.on { border-color: var(--brand); background: var(--brand-50);
+                     color: var(--brand-dark); }
+.chip-count { font: 600 11px Inter, sans-serif; color: var(--muted);
+              background: var(--bg); border-radius: 999px; padding: 1px 7px; }
+.chip-x { border: 0; background: transparent; color: var(--dim); cursor: pointer;
+          font-size: 16px; line-height: 1; padding: 0 4px; }
+.chip-x:hover { color: var(--red); }
+.set-add { display: flex; gap: 8px; margin-bottom: 7px; flex-wrap: wrap; }
+.set-inp { padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px;
+           background: #fff; outline: none; font-size: 13px; max-width: 220px; }
+.set-inp:focus { border-color: var(--brand-mid); }

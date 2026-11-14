@@ -33,15 +33,32 @@ APP_PASSWORD = os.getenv("SABERTASK_PASSWORD", "Sabertask2026!")
 
 # ----------------------------------------------------------------- currency ---
 # Sabertask's own market signals are Danish, so the pipeline is kept in kroner.
-CURRENCY = "DKK"
+# Every amount is stored in this one currency and converted only for display.
+# Flipping a reporting currency must never rewrite what is in the database:
+# two people on the same pipeline read it in different money, and the numbers
+# underneath stay the same.
+BASE_CURRENCY = "DKK"
+
+# Fixed for the trial, on purpose. A live FX feed would make yesterday's report
+# unreproducible and add a dependency that can fail in front of a customer. The
+# date is shown in the app so nobody reads these as today's rates.
+FX_DATE = "2026-11-14"
+CURRENCIES = [
+    {"key": "DKK", "symbol": "kr", "label": "Danish kroner", "per_base": 1.0},
+    {"key": "EUR", "symbol": "EUR", "label": "Euro", "per_base": 0.134},
+    {"key": "USD", "symbol": "USD", "label": "US dollars", "per_base": 0.145},
+]
+CURRENCY_BY_KEY = {c["key"]: c for c in CURRENCIES}
+CURRENCY = BASE_CURRENCY          # what the seats below are priced in
 CURRENCY_SYMBOL = "kr"
 
 
-def money(amount):
-    """1234567 -> '1.234.567 kr' (Danish thousands separator)."""
-    whole = int(round(amount or 0))
+def money(amount, currency=None):
+    """1234567 -> '1.234.567 kr'. Converts from the base currency on the way."""
+    spec = CURRENCY_BY_KEY.get(currency or BASE_CURRENCY, CURRENCY_BY_KEY[BASE_CURRENCY])
+    whole = int(round((amount or 0) * spec["per_base"]))
     text = "{:,}".format(whole).replace(",", ".")
-    return text + " " + CURRENCY_SYMBOL
+    return text + " " + spec["symbol"]
 
 
 # ------------------------------------------------------------------- seats ---
@@ -140,13 +157,33 @@ SEGMENT_SHORT = {s["key"]: s["short"] for s in SEGMENTS}
 SEGMENT_COLOR = {s["key"]: s["color"] for s in SEGMENTS}
 SEGMENT_KEYS = [s["key"] for s in SEGMENTS]
 
+def flag_for(code):
+    """The flag emoji for any ISO 3166-1 alpha-2 code, computed rather than
+    looked up. A table would be one more place to edit when a country is added
+    from the Settings screen, and the whole point of that screen is that adding
+    one takes no code."""
+    code = (code or "").strip().upper()
+    if len(code) != 2 or not code.isalpha():
+        return ""
+    return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in code)
+
+
+# Where the trial starts looking. This is only the default: the set is editable
+# at runtime from Settings and `settings_store` is what every consumer reads, so
+# a country added there works in the search immediately and without a restart.
+# Nothing in the search path may hard-code this list.
 COUNTRIES = [
-    {"key": "BE", "label": "Belgium", "flag": "\U0001F1E7\U0001F1EA"},
-    {"key": "NL", "label": "Netherlands", "flag": "\U0001F1F3\U0001F1F1"},
-    {"key": "LU", "label": "Luxembourg", "flag": "\U0001F1F1\U0001F1FA"},
-    {"key": "DK", "label": "Denmark", "flag": "\U0001F1E9\U0001F1F0"},
-    {"key": "SE", "label": "Sweden", "flag": "\U0001F1F8\U0001F1EA"},
-    {"key": "NO", "label": "Norway", "flag": "\U0001F1F3\U0001F1F4"},
+    {"key": code, "label": label, "flag": flag_for(code)}
+    for code, label in [
+        ("BE", "Belgium"),
+        ("NL", "Netherlands"),
+        ("US", "United States"),
+        ("CA", "Canada"),
+        ("DK", "Denmark"),
+        ("NO", "Norway"),
+        ("SE", "Sweden"),
+        ("FI", "Finland"),
+    ]
 ]
 COUNTRY_LABEL = {c["key"]: c["label"] for c in COUNTRIES}
 COUNTRY_FLAG = {c["key"]: c["flag"] for c in COUNTRIES}
@@ -236,14 +273,18 @@ MAIL_MODEL = os.getenv("MAIL_MODEL", "claude-opus-5-5")
 MAIL_STAGES = ["lead", "contacted", "nurture"]
 
 # ------------------------------------------------------------------ leads ---
-# The hard ceiling on one search, and a ceiling rather than a default: this is
-# a trial, the map is a free service run by volunteers, and a run that can pull
-# thousands of records is both a bad neighbour and a review list nobody will
-# ever work through. Deliberately not an env var and not a setting, so it
-# cannot be raised from the dashboard or from a deployment by accident. It is
-# clamped in the search endpoint and again in the Overpass query, because the
-# point is not to fetch ten thousand rows and throw all but a hundred away.
-LEAD_HARD_CAP = 100
+# The ceiling on one search, per country, counted over every industry in that
+# search together. Three countries in one brief can therefore return 150 leads
+# and the total grows with the set, which is the user's own decision: there is
+# deliberately no overall ceiling on top of it.
+#
+# A ceiling rather than a default. The map is a free service run by volunteers,
+# and a run that can pull thousands of records is both a bad neighbour and a
+# review list nobody will ever work through. Deliberately not an env var and
+# not a setting, so it cannot be raised from the dashboard or by a deployment.
+# Enforced in the Overpass query, one query per country so the limit binds per
+# country, and again as a clamp in the endpoint in case a mirror ignores it.
+LEAD_CAP_PER_COUNTRY = 50
 
 QUOTE_PREFIX = "ST"
 QUOTE_VALID_DAYS = 30
