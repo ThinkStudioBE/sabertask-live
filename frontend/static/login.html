@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sign in - Sabertask Sales</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/sabertask.css?v=12">
+</head>
+<body>
+<div class="login-page">
+  <form class="login-card" id="form">
+    <div class="wordmark">Saber<span>task</span></div>
+    <p class="tag">Sales platform</p>
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" value="sabertask@think-studio.com" required>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" value="{{APP_PASSWORD}}" required>
+    </div>
+    <button class="btn primary" style="width:100%" type="submit">Sign in</button>
+    <div class="err" id="err"></div>
+    <div class="demo-hint">
+      Accounts, password <b>{{APP_PASSWORD}}</b><br>
+      <b>sabertask@think-studio.com</b> owner, sees every industry<br>
+      <b>cleaning@sabertask.local</b> cleaning and window cleaning<br>
+      <b>facility@sabertask.local</b> facility management and public sector<br>
+      <b>green@sabertask.local</b> landscaping and winter services
+      <p style="margin:12px 0 0">Real companies, found on the public map. The
+      pipeline starts empty and fills up as you search.</p>
+    </div>
+  </form>
+</div>
+<script>
+document.getElementById('form').addEventListener('submit', async function (event) {
+  event.preventDefault();
+  var err = document.getElementById('err');
+  err.textContent = '';
+  var res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: document.getElementById('email').value,
+      password: document.getElementById('password').value
+    })
+  });
+  if (res.ok) { window.location.href = '/'; return; }
+  var data = await res.json().catch(function () { return {}; });
+  err.textContent = data.detail || 'Could not sign in';
+});
+</script>
+</body>
+</html>

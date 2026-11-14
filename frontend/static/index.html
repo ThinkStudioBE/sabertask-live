@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sabertask Sales</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/sabertask.css?v=12">
+</head>
+<body>
+
+<div id="app">
+  <nav class="rail" id="rail"></nav>
+  <div class="main">
+    <div class="topbar">
+      <div class="wordmark">Saber<span>task</span></div>
+      <div class="view-name" id="view-name">Today</div>
+      <div class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" placeholder="Search companies and deals">
+      </div>
+      <div class="grow"></div>
+      <button class="btn" id="btn-export">Export CSV</button>
+      <button class="btn" id="btn-import">Import CSV</button>
+      <button class="btn primary" id="btn-new">+ New deal</button>
+    </div>
+    <div class="desk" id="desk"></div>
+    <div id="body"></div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer"></aside>
+<div class="modal-wrap" id="modal-wrap"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="/app.js?v=12"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Render Blueprint for Sabertask Sales (the live build).
+#
+# Free plan, no disk: the SQLite database lives on the container's ephemeral
+# filesystem and is re-seeded from app/seed.py on every cold start. For a demo
+# that is the right trade-off rather than a compromise: the pipeline is seeded
+# from offsets in days, so it always opens looking live, and nothing a viewer
+# clicks during a demo can leave the data in a state the next viewer inherits.
+#
+# If this ever needs to remember what people typed, give it a DATABASE_URL
+# pointing at a Postgres instance; nothing else in the app has to change.
+services:
+  - type: web
+    name: sabertask-live
+    runtime: python
+    region: frankfurt
+    plan: free
+    branch: main
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    # Served from Think Studio's own domain. Render issues the certificate
+    # once the CNAME points here; the .onrender.com address keeps working.
+    domains:
+      - sabertask.think-studio.com
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Signs the session cookie. Render generates it, so it never sits in git.
+      - key: SESSION_SECRET
+        generateValue: true
+      # The demo is served over HTTPS, so the cookie never goes out in clear.
+      - key: SESSION_SECURE
+        value: "true"
+      # The shared password for every account. Set it in the Render
+      # dashboard; the login page's hint reads it, so the two cannot drift.
+      - key: SABERTASK_PASSWORD
+        sync: false
+      # Cold mail is drafted by Claude. Paste the key in the Render dashboard;
+      # without it the app still runs and falls back to a plain drafter, and the
+      # reason is printed once per draft in the service log.
+      - key: ANTHROPIC_API_KEY
+        sync: false
