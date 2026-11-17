@@ -98,6 +98,38 @@ SECTOR_TAGS = {
 }
 GENERIC_TAGS = ["office=company"]
 
+# Words distinctive enough to find a company by its name alone. Drawn from
+# SECTOR_WORDS, minus the ones that would drag in half a city: "park" catches
+# every parking garage, "service" catches everything, "salt" and "city" are
+# words before they are industries.
+TOO_BROAD = {"park", "green", "salt", "city", "stad", "service", "net", "public"}
+
+
+def name_pattern(segment):
+    """A regex for finding a company by its name rather than by its tag.
+
+    Kept, and deliberately not used in the query. The idea is sound: a sector
+    whose tag nobody fills in is invisible, and the name is the thing those
+    companies do have. The measurement killed it.
+
+    Antwerp, through the fastest mirror: the tag-only query answers in 7
+    seconds. Adding a name clause, even paired with `["office"]` so it only
+    reads businesses and even with the word list cut to four, takes **80**. The
+    cost is the scan itself, not the size of the regex. Behind a proxy that cuts
+    a request off at a hundred seconds, that is not a slower search, it is an
+    empty screen.
+
+    What it brought back does not pay for that either: two genuine cleaning
+    companies the tags had missed, and for facility management a page of estate
+    agents, because "vastgoed" is what they call themselves too.
+
+    The honest fix for a thin sector is a different source, a business register
+    rather than a map. Left here so nobody spends the evening rediscovering it.
+    """
+    words = sorted({w.strip().lower() for w in SECTOR_WORDS.get(segment, [])
+                    if len(w.strip()) >= 4 and w.strip() not in TOO_BROAD})
+    return "|".join(words)
+
 # Words that say what a company actually does, whatever tag it was filed under.
 SECTOR_WORDS = {
     "cleaning": ["clean", "schoonmaak", "reiniging", "rengor", "rengjor", "staed",
@@ -278,7 +310,8 @@ def _bbox(place: str, require_place: bool = False) -> Optional[Tuple[tuple, Opti
 
 
 def _query(tags: List[str], country: str, cities: List[str],
-           boxes: Optional[List[tuple]] = None) -> str:
+           boxes: Optional[List[tuple]] = None,
+           segments: Optional[List[str]] = None) -> str:
     """One country's question.
 
     One query per country rather than one for all of them, because the cap is
@@ -309,10 +342,17 @@ def _query(tags: List[str], country: str, cities: List[str],
         lines.append("map_to_area->." + scope + ";")
         scopes.append(scope)
 
-    clauses = ""
+    # Two ways in. The tags are precise and thin; the names are broad and
+    # exactly where the companies a sector tag never got are hiding.
+    selectors = []
     for tag in tags:
         key, _, value = tag.partition("=")
-        selector = '["' + key.strip() + '"="' + value.strip() + '"]'
+        selectors.append('["' + key.strip() + '"="' + value.strip() + '"]')
+    # Searching on the name as well was tried and measured, and it is off: see
+    # name_pattern for what it costs and what it brings back.
+
+    clauses = ""
+    for selector in selectors:
         if scopes:
             for scope in scopes:
                 clauses += "  nwr" + selector + "(area." + scope + ");\n"
@@ -610,7 +650,8 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
             continue
         try:
             elements_by_country[code] = _overpass(
-                _query(tags, code, cities_by_country[code]))
+                _query(tags, code, cities_by_country[code],
+                       segments=criteria["segments"]))
         except SearchFailed as error:
             failure = error
             skipped.append(code)
