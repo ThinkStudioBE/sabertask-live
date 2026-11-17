@@ -68,13 +68,17 @@ USER_AGENT = "SabertaskSales/1.0 (+https://www.sabertask.com)"
 # Overpass is free and queues: a busy endpoint accepts the connection and then
 # says nothing until a slot frees. Fifteen seconds is a demo's patience and it
 # throws away answers that were on their way, so this build waits properly.
-OVERPASS_TIMEOUT = 45
+OVERPASS_TIMEOUT = 30
 # How long the whole map phase may take before the search gives up. Generous,
 # because there is nothing to fall back on here: an empty list is the honest
 # answer and a slow one beats a wrong one. It has to cover every mirror in the
 # list being unreachable in turn, or the one that would have answered is never
 # reached.
-MAP_BUDGET = 150
+# Kept under the edge timeout in front of the service, which cuts a request off
+# at about a hundred seconds and hands back an empty body. A search that runs
+# over that shows the rep nothing at all, so the budget stops first and the
+# countries it did not reach are reported by name instead.
+MAP_BUDGET = 70
 HTTP_TIMEOUT = 15
 
 MAX_CITIES = 3
