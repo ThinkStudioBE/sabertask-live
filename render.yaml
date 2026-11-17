@@ -1,13 +1,14 @@
 # Render Blueprint for Sabertask Sales (the live build).
 #
-# Free plan, no disk: the SQLite database lives on the container's ephemeral
-# filesystem and is re-seeded from app/seed.py on every cold start. For a demo
-# that is the right trade-off rather than a compromise: the pipeline is seeded
-# from offsets in days, so it always opens looking live, and nothing a viewer
-# clicks during a demo can leave the data in a state the next viewer inherits.
+# Free plan, and the database is not on it. This app collects real companies
+# somebody went looking for, and a free instance has an ephemeral filesystem,
+# so a SQLite file here would quietly lose the pipeline on every cold start.
+# DATABASE_URL points at a managed Postgres and that is where everything lives,
+# the editable country set included.
 #
-# If this ever needs to remember what people typed, give it a DATABASE_URL
-# pointing at a Postgres instance; nothing else in the app has to change.
+# Consequence of the free plan: the service sleeps after about fifteen minutes
+# of silence and the first request after that takes 30 to 60 seconds. The data
+# survives it.
 services:
   - type: web
     name: sabertask-live
@@ -21,14 +22,14 @@ services:
     # Served from Think Studio's own domain. Render issues the certificate
     # once the CNAME points here; the .onrender.com address keeps working.
     domains:
-      - sabertask.think-studio.com
+      - sabertask-live.think-studio.com
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
       # Signs the session cookie. Render generates it, so it never sits in git.
       - key: SESSION_SECRET
         generateValue: true
-      # The demo is served over HTTPS, so the cookie never goes out in clear.
+      # Served over HTTPS, so the cookie never goes out in clear.
       - key: SESSION_SECURE
         value: "true"
       # The shared password for every account. Set it in the Render
@@ -39,4 +40,9 @@ services:
       # without it the app still runs and falls back to a plain drafter, and the
       # reason is printed once per draft in the service log.
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # Postgres. Everything the app learns lives here rather than on the
+      # container, which is thrown away on every restart. Paste the Neon
+      # connection string in the Render dashboard.
+      - key: DATABASE_URL
         sync: false

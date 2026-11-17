@@ -19,8 +19,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent          # backend/
 PROJECT_DIR = BASE_DIR.parent                              # sabertask-live/
 FRONTEND_DIR = PROJECT_DIR / "frontend" / "static"
 
-BUNDLED_DB = BASE_DIR / "sabertask-live.db"
-DB_PATH = Path(os.getenv("DB_PATH", str(BUNDLED_DB)))
+# Everything this app learns lives here: the database and the editable settings.
+# On a host with a mounted disk, point DATA_DIR at it. The prospects in here are
+# real companies somebody went looking for, so losing them to a restart is data
+# loss rather than a reset.
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
+DB_PATH = Path(os.getenv("DB_PATH", str(DATA_DIR / "sabertask-live.db")))
 
 SESSION_COOKIE = "sabertask_live_session"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "sabertask-live-secret-change-me")

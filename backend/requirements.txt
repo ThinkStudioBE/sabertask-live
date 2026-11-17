@@ -5,3 +5,5 @@ python-multipart==0.0.20
 anthropic==0.125.0
 # Used directly by the lead search; also an anthropic dependency.
 httpx==0.28.1
+# Only used when DATABASE_URL points at Postgres.
+psycopg[binary]==3.2.9

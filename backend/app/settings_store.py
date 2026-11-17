@@ -12,17 +12,23 @@ a module constant. Call `settings_store.countries()` where you need it.
 """
 
 import json
-import os
 import threading
+import time
 from typing import Dict, List, Optional
+
+from sqlmodel import Session, select
 
 from . import config
 
-SETTINGS_PATH = config.BASE_DIR / "settings.json"
+# How long a reader may keep what it last saw. Short, because the point of this
+# module is that a country added on one screen is searchable on the next
+# request; long enough that drawing a list of five hundred rows does not become
+# five hundred queries.
+CACHE_TTL = 5.0
 
 _lock = threading.Lock()
 _cache = None
-_cache_stamp = None
+_cache_until = 0.0
 
 
 def _defaults() -> dict:
@@ -32,42 +38,46 @@ def _defaults() -> dict:
 
 
 def _read() -> dict:
-    """The file, merged over the defaults. Re-read whenever it changes on disk,
-    so another process editing it is picked up too."""
-    global _cache, _cache_stamp
-    try:
-        stamp = os.path.getmtime(SETTINGS_PATH)
-    except OSError:
-        stamp = None
-
-    if _cache is not None and stamp == _cache_stamp:
+    """What is stored, merged over the defaults."""
+    global _cache, _cache_until
+    if _cache is not None and time.time() < _cache_until:
         return _cache
 
     data = _defaults()
-    if stamp is not None:
-        try:
-            with open(SETTINGS_PATH, "r") as handle:
-                stored = json.load(handle)
-            if isinstance(stored, dict):
-                data.update({k: v for k, v in stored.items() if v is not None})
-        except (ValueError, OSError):
-            # A corrupt settings file must not take the app down with it: the
-            # defaults are a working configuration.
-            print("[settings] " + str(SETTINGS_PATH) + " could not be read, using defaults")
+    try:
+        from .db import engine
+        from .models import AppSetting
+        with Session(engine) as session:
+            for row in session.exec(select(AppSetting)).all():
+                try:
+                    value = json.loads(row.value)
+                except ValueError:
+                    continue
+                if value is not None:
+                    data[row.key] = value
+    except Exception as error:
+        # A settings read must never be the thing that takes a page down. The
+        # defaults are a working configuration.
+        print("[settings] could not be read (" + type(error).__name__ + "), using defaults")
 
-    _cache, _cache_stamp = data, stamp
+    _cache, _cache_until = data, time.time() + CACHE_TTL
     return data
 
 
-def _write(data: dict) -> None:
-    global _cache, _cache_stamp
-    with open(SETTINGS_PATH, "w") as handle:
-        json.dump(data, handle, indent=2, ensure_ascii=False)
-    _cache = data
-    try:
-        _cache_stamp = os.path.getmtime(SETTINGS_PATH)
-    except OSError:
-        _cache_stamp = None
+def _store(key: str, value) -> None:
+    global _cache, _cache_until
+    from .db import engine
+    from .models import AppSetting
+    with Session(engine) as session:
+        row = session.get(AppSetting, key)
+        if row is None:
+            row = AppSetting(key=key)
+        row.value = json.dumps(value, ensure_ascii=False)
+        row.updated_at = __import__("datetime").datetime.utcnow()
+        session.add(row)
+        session.commit()
+    _cache = None
+    _cache_until = 0.0
 
 
 # ---------------------------------------------------------------- countries ---
@@ -121,15 +131,13 @@ def add_country(code: str, label: Optional[str] = None) -> Dict[str, str]:
                 if label:
                     row["label"] = label.strip()
                     row["flag"] = config.flag_for(code)
-                    data["countries"] = rows
-                    _write(data)
+                    _store("countries", rows)
                 return {"key": code, "label": row.get("label") or code,
                         "flag": row.get("flag") or config.flag_for(code)}
         row = {"key": code, "label": (label or code).strip() or code,
                "flag": config.flag_for(code)}
         rows.append(row)
-        data["countries"] = rows
-        _write(data)
+        _store("countries", rows)
         return row
 
 
@@ -141,6 +149,5 @@ def remove_country(code: str) -> bool:
         kept = [r for r in rows if str(r.get("key", "")).upper() != code]
         if len(kept) == len(rows):
             return False
-        data["countries"] = kept
-        _write(data)
+        _store("countries", kept)
         return True

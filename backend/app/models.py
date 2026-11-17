@@ -294,3 +294,16 @@ class LeadSearch(SQLModel, table=True):
     kept: int = Field(default=0)       # what ended up on the review list
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class AppSetting(SQLModel, table=True):
+    """Settings somebody edited, kept in the database rather than in a file.
+
+    The host this runs on has an ephemeral filesystem, so a JSON file next to
+    the code would quietly reset the country set on every restart. The database
+    is the one place that survives, so that is where it goes.
+    """
+
+    key: str = Field(primary_key=True)
+    value: str = Field(default="")          # JSON
+    updated_at: datetime = Field(default_factory=utcnow)
