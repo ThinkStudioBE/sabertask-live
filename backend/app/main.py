@@ -42,7 +42,15 @@ def startup():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": config.APP_NAME}
+    """Also says which store it is on.
+
+    Worth the two words: on a host with an ephemeral filesystem, a missing
+    DATABASE_URL is not an error anywhere. The app starts, seeds itself, works
+    all afternoon and loses the pipeline at the first restart. The only way to
+    catch that is to ask it, from outside, what it is writing to."""
+    from .db import ON_POSTGRES
+    return {"ok": True, "app": config.APP_NAME,
+            "store": "postgres" if ON_POSTGRES else "sqlite (not durable here)"}
 
 
 class LoginIn(BaseModel):
