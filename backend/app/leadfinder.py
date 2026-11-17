@@ -51,11 +51,15 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 OVERPASS_URLS = [
     url.strip() for url in os.getenv(
         "OVERPASS_URLS",
+        # Ordered by what actually answers. The French instance is first
+        # because it is the one that has been reliable from here and from the
+        # host: the main endpoint hands back an error page as often as a
+        # result, and the rest queue.
+        "https://overpass.openstreetmap.fr/api/interpreter,"
         "https://overpass-api.de/api/interpreter,"
         "https://overpass.kumi.systems/api/interpreter,"
         "https://overpass.private.coffee/api/interpreter,"
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter,"
-        "https://overpass.osm.jp/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     ).split(",") if url.strip()
 ]
 # OSM asks automated clients to identify themselves. A product name, never a
@@ -269,7 +273,8 @@ def _bbox(place: str, require_place: bool = False) -> Optional[Tuple[tuple, Opti
     return (south, west, north, east), code
 
 
-def _query(tags: List[str], country: str, boxes: List[tuple]) -> str:
+def _query(tags: List[str], country: str, cities: List[str],
+           boxes: Optional[List[tuple]] = None) -> str:
     """One country's question.
 
     One query per country rather than one for all of them, because the cap is
@@ -277,28 +282,48 @@ def _query(tags: List[str], country: str, boxes: List[tuple]) -> str:
     three countries could come back as fifty leads from one of them and none
     from the other two.
 
-    Each clause is intersected with the real border as well as any bounding
-    box. A box is a rectangle and a country is not, so a box drawn round a
-    border city reaches into its neighbours, and everything caught there would
-    be filed under the country we asked for rather than the one it is in.
+    Cities are resolved inside the query, by name, within the country's own
+    boundary. That is better than handing in a bounding box from a geocoder in
+    two ways. It needs no second service, which matters because the geocoder
+    rate-limits and refuses datacentre addresses outright, and it uses the
+    city's real outline: a box drawn round a border city reaches into the
+    neighbouring country, and everything caught there would be filed under the
+    country we asked for rather than the one it is in.
     """
     code = country.upper()
     area = "c_" + code.lower()
-    preamble = 'area["ISO3166-1"="' + code + '"]["admin_level"="2"]->.' + area + ";\n"
+    lines = ['area["ISO3166-1"="' + code + '"]["admin_level"="2"]->.' + area + ";"]
+
+    scopes = []
+    for index, city in enumerate(cities or []):
+        name = city.replace('"', "")
+        scope = "a_" + str(index)
+        # admin_level 6 to 10 covers city, municipality, borough and district
+        # across the markets this runs in, which do not agree on a number.
+        lines.append('rel(area.' + area + ')["name"="' + name + '"]'
+                     '["admin_level"~"^(6|7|8|9|10)$"];')
+        lines.append("map_to_area->." + scope + ";")
+        scopes.append(scope)
+
     clauses = ""
     for tag in tags:
         key, _, value = tag.partition("=")
         selector = '["' + key.strip() + '"="' + value.strip() + '"]'
-        if boxes:
+        if scopes:
+            for scope in scopes:
+                clauses += "  nwr" + selector + "(area." + scope + ");\n"
+        elif boxes:
             for box in boxes:
                 clauses += ("  nwr" + selector + "(area." + area + ")("
                             + ",".join("%.6f" % v for v in box) + ");\n")
         else:
-            # No city named and none on file: the whole country. The cap is
-            # what keeps that sane, and it is in the query rather than applied
-            # to the answer so the server never does work we throw away.
+            # No city named: the whole country. The cap is what keeps that sane,
+            # and it is in the query rather than applied to the answer so the
+            # server never does work we throw away.
             clauses += "  nwr" + selector + "(area." + area + ");\n"
-    return ("[out:json][timeout:" + str(OVERPASS_TIMEOUT) + "];\n" + preamble
+
+    return ("[out:json][timeout:" + str(OVERPASS_TIMEOUT) + "];\n"
+            + "\n".join(lines) + "\n"
             + "(\n" + clauses + ");\n"
             + "out tags center " + str(config.LEAD_CAP_PER_COUNTRY) + ";\n")
 
@@ -493,29 +518,23 @@ def _clean(value: Optional[str]) -> Optional[str]:
     return value[:300] or None
 
 
-def _plan(criteria: dict) -> List[Tuple[str, List[str]]]:
-    """[(country, [city, ...])], where an empty city list means the whole country.
+def _plan(criteria: dict) -> List[Tuple[Optional[str], List[str]]]:
+    """[(country, [city, ...])], where an empty city list means the whole country
+    and a country of None means the brief named a city without one.
 
-    A city the brief names is placed by the geocoder rather than by us, and a
-    country nobody has written seed cities for is searched whole. That is what
-    lets a country added from Settings work in the very next search.
+    When the brief gives both, each named city is paired with each named
+    country: the query resolves the name inside that country's own boundary and
+    comes back empty where it does not exist, so a wrong pairing costs nothing
+    and a right one needs no geocoder.
     """
-    by_country = {}
-    order = []
+    cities = criteria["cities"]
+    countries = criteria["countries"]
 
-    for city in criteria["cities"]:
-        by_country.setdefault(None, [])
-        if city not in by_country[None]:
-            by_country[None].append(city)
-        if None not in order:
-            order.append(None)
-
-    if not order:
-        for code in criteria["countries"]:
-            order.append(code)
-            by_country[code] = list(SEED_CITIES.get(code, []))[:MAX_CITIES]
-
-    return [(code, by_country[code]) for code in order]
+    if cities and countries:
+        return [(code, list(cities)) for code in countries]
+    if cities:
+        return [(None, list(cities))]
+    return [(code, list(SEED_CITIES.get(code, []))[:MAX_CITIES]) for code in countries]
 
 
 def search(brief: str) -> Tuple[dict, List[dict]]:
@@ -529,54 +548,50 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
 
     if map_is_down():
         criteria["searched"] = [c for _code, cities in plan for c in cities]
-        criteria["areas"] = []
         raise SearchFailed("The map was unreachable a moment ago, so this search "
                            "did not wait for it again.", criteria)
 
-    # Resolve every named city to a box and, crucially, to the country the map
-    # says it is in. A box around Zurich filed under Belgium matches nothing,
-    # and an empty answer reads exactly like a city with no companies in it.
     live = set(settings_store.country_codes())
-    boxes_by_country = {}
-    searched = []
-    for code, cities in plan:
-        if code is not None and not cities:
-            boxes_by_country.setdefault(code, [])
-            searched.append(settings_store.country_label(code, code))
-            continue
-        for city in cities:
-            place = city + (", " + settings_store.country_label(code) if code else "")
-            try:
-                found = _bbox(place)
-            except httpx.HTTPError:
-                found = None
-            if found is None and code is None:
-                for guess in live:
-                    try:
-                        found = _bbox(city + ", " + settings_store.country_label(guess),
-                                      require_place=True)
-                    except httpx.HTTPError:
-                        found = None
-                    time.sleep(1)   # one Nominatim call a second, guesses too
-                    if found is not None:
-                        code = guess
-                        break
-            if found is None:
-                continue
-            box, resolved = found
-            where = resolved or code
-            if where is None:
-                continue
-            boxes_by_country.setdefault(where, []).append(box)
-            searched.append(city)
-            time.sleep(1)   # Nominatim asks for no more than one call a second
 
-    criteria["searched"] = searched
+    # Group the plan by country. A city whose country the brief did not give is
+    # placed by the geocoder; if that refuses us, the city is tried inside every
+    # country in the set, which the query can do by name on its own.
+    cities_by_country = {}
+    floating = []
+    for code, cities in plan:
+        if code is None:
+            floating.extend(cities)
+        else:
+            cities_by_country.setdefault(code, []).extend(cities)
+
+    for city in floating:
+        placed = None
+        try:
+            found = _bbox(city)
+        except httpx.HTTPError as error:
+            _note(NOMINATIM_URL, type(error).__name__)
+            found = None
+        if found is not None:
+            _box, placed = found
+            time.sleep(1)   # Nominatim asks for no more than one call a second
+        if placed and placed in live:
+            cities_by_country.setdefault(placed, []).append(city)
+        else:
+            # Nobody told us and nothing would, so ask every market. Each query
+            # resolves the name inside that country and comes back empty where
+            # the city does not exist, which is the answer we wanted anyway.
+            for code in sorted(live):
+                cities_by_country.setdefault(code, []).append(city)
+
+    criteria["searched"] = sorted({c for cities in cities_by_country.values()
+                                   for c in cities}) or [
+        settings_store.country_label(code) for code in cities_by_country]
     criteria["tags"] = tags
-    criteria["countries_searched"] = sorted(boxes_by_country)
+    criteria["countries_searched"] = sorted(cities_by_country)
     criteria["cap_per_country"] = config.LEAD_CAP_PER_COUNTRY
-    if not boxes_by_country:
-        raise SearchFailed("None of those places could be found on the map.", criteria)
+    if not cities_by_country:
+        raise SearchFailed("Nothing to search. Name an industry and a city or "
+                           "a country in the brief.", criteria)
 
     # One query per country, and the budget is spent in the order they were
     # asked for: a country that is never reached is reported rather than
@@ -585,12 +600,13 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
     elements_by_country = {}
     skipped = []
     failure = None
-    for code in sorted(boxes_by_country):
+    for code in sorted(cities_by_country):
         if time.time() > deadline:
             skipped.append(code)
             continue
         try:
-            elements_by_country[code] = _overpass(_query(tags, code, boxes_by_country[code]))
+            elements_by_country[code] = _overpass(
+                _query(tags, code, cities_by_country[code]))
         except SearchFailed as error:
             failure = error
             skipped.append(code)
