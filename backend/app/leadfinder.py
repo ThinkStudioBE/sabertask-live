@@ -53,7 +53,9 @@ OVERPASS_URLS = [
         "OVERPASS_URLS",
         "https://overpass-api.de/api/interpreter,"
         "https://overpass.kumi.systems/api/interpreter,"
-        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter,"
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter,"
+        "https://overpass.osm.jp/api/interpreter",
     ).split(",") if url.strip()
 ]
 # OSM asks automated clients to identify themselves. A product name, never a
@@ -301,6 +303,18 @@ def _query(tags: List[str], country: str, boxes: List[tuple]) -> str:
             + "out tags center " + str(config.LEAD_CAP_PER_COUNTRY) + ";\n")
 
 
+# Why each mirror did not answer, for the run in progress. An operator looking
+# at a failed search should not have to read a server log to find out whether
+# the map refused us, queued us or was never reachable at all.
+_reasons = []
+
+
+def _note(url: str, reason: str) -> None:
+    host = url.split("//")[-1].split("/")[0]
+    _reasons.append(host + ": " + reason)
+    print("[leads] " + host + ": " + reason)
+
+
 def _curl(url: str, query: str, budget: float) -> Optional[dict]:
     """Ask the mirror again through curl, which has its own TLS.
 
@@ -318,16 +332,16 @@ def _curl(url: str, query: str, budget: float) -> Optional[dict]:
             stderr=subprocess.PIPE, timeout=budget + 5,
         )
     except (OSError, subprocess.SubprocessError) as error:
-        print("[leads] curl could not reach " + url + ": " + str(error)[:120])
+        _note(url, "curl could not reach it: " + str(error)[:90])
         return None
     if result.returncode != 0:
-        print("[leads] curl exited " + str(result.returncode) + " for " + url
-              + ": " + result.stderr.decode("utf-8", "replace")[:120])
+        _note(url, "curl exited " + str(result.returncode) + ": "
+              + result.stderr.decode("utf-8", "replace").strip()[:90])
         return None
     try:
         return json.loads(result.stdout.decode("utf-8", "replace"))
     except ValueError:
-        print("[leads] " + url + " answered curl with something that is not JSON")
+        _note(url, "answered curl with something that is not JSON")
         return None
 
 
@@ -335,7 +349,7 @@ def _ask(url: str, query: str, budget: float) -> Optional[List[dict]]:
     """One mirror, one retry. None means "ask the next mirror"."""
     for attempt in range(2):
         try:
-            with httpx.Client(timeout=budget) as client:
+            with httpx.Client(timeout=budget, follow_redirects=True) as client:
                 response = client.post(url, data={"data": query},
                                        headers={"User-Agent": USER_AGENT})
         except httpx.HTTPError as error:
@@ -344,9 +358,9 @@ def _ask(url: str, query: str, budget: float) -> Optional[List[dict]]:
             # and spending the same budget again on a slower client only burns
             # the time the next mirror needed.
             if not isinstance(error, httpx.ConnectError):
-                print("[leads] " + url + ": " + type(error).__name__)
+                _note(url, type(error).__name__)
                 return None
-            print("[leads] " + url + " refused the handshake, trying curl")
+            _note(url, "refused the handshake, retrying through curl")
             payload = _curl(url, query, budget)
             if payload is None:
                 return None
@@ -355,10 +369,19 @@ def _ask(url: str, query: str, budget: float) -> Optional[List[dict]]:
             if attempt == 0:
                 time.sleep(2)
                 continue
+            _note(url, "too busy (HTTP " + str(response.status_code) + ")")
             return None
         if response.status_code >= 400:
+            _note(url, "HTTP " + str(response.status_code))
             return None
-        return _elements(response.json())
+        try:
+            payload = response.json()
+        except ValueError:
+            # A mirror that is unwell answers with an HTML error page. Reading
+            # that as "no results" is the mistake this module exists to avoid.
+            _note(url, "answered with something that is not JSON")
+            return None
+        return _elements(payload)
     return None
 
 
@@ -389,6 +412,7 @@ def map_is_down() -> bool:
 
 def _overpass(query: str) -> List[dict]:
     global _map_down_until
+    del _reasons[:]
     if map_is_down():
         raise SearchFailed("The map was unreachable a moment ago, so this search "
                            "did not wait for it again.")
@@ -402,7 +426,7 @@ def _overpass(query: str) -> List[dict]:
             return elements
     _map_down_until = time.time() + MAP_QUIET_FOR
     raise SearchFailed("No OpenStreetMap server is answering right now. "
-                       "Try again in a minute.")
+                       + ("Tried " + "; ".join(_reasons) + "." if _reasons else ""))
 
 
 def _segment_for(name: str, tag_segments: List[str], element: dict) -> str:
