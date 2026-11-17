@@ -15,7 +15,7 @@ from .api import (
     clients, companies, deals, leads, mail, meta, quotes, reports, settings,
     tasks, transfer,
 )
-from .seed import seed_if_empty
+from .seed import seed_if_empty, sync_passwords
 from .serializers import user_dict
 
 app = FastAPI(title=config.APP_NAME, docs_url=None, redoc_url=None)
@@ -38,6 +38,7 @@ app.add_middleware(AuthMiddleware)
 def startup():
     init_db()
     seed_if_empty()
+    sync_passwords()
 
 
 @app.get("/api/health")

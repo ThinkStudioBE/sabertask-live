@@ -12,7 +12,7 @@ Rename a desk to the colleague who runs it and the routing follows.
 from sqlmodel import Session, select
 
 from . import config
-from .auth import hash_password
+from .auth import hash_password, verify_password
 from .db import engine
 from .models import User
 
@@ -60,3 +60,31 @@ def seed_if_empty():
 
         print("[seed] " + str(len(DESKS)) + " accounts, no prospects. "
               "Sign in as " + DESKS[0]["email"] + " and run a search.")
+
+
+def sync_passwords():
+    """Keep the desk accounts on whatever APP_PASSWORD currently says.
+
+    This app has one shared password and the login page prints it, so the
+    environment variable is the truth and the stored hash is a copy of it. The
+    accounts are seeded once, which means changing the variable afterwards
+    otherwise changes the hint on the screen and nothing else: the page then
+    advertises a password that does not work, which is worse than no hint.
+
+    Only the seeded desks, and only when the current password does not already
+    verify, so this is a no-op on every boot but the one after a change.
+    """
+    emails = {spec["email"] for spec in DESKS}
+    with Session(engine) as session:
+        changed = 0
+        for user in session.exec(select(User)).all():
+            if user.email not in emails:
+                continue
+            if verify_password(config.APP_PASSWORD, user.password_hash):
+                continue
+            user.password_hash = hash_password(config.APP_PASSWORD)
+            session.add(user)
+            changed += 1
+        if changed:
+            session.commit()
+            print("[seed] password updated on " + str(changed) + " account(s)")
