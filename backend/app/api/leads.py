@@ -18,7 +18,9 @@ router = APIRouter(prefix="/api", tags=["leads"])
 
 # What a brand new prospect is worth until somebody asks them. Small on purpose:
 # a forecast should not move because a search ran.
-STARTER_SEATS = {"worker": 20, "planner": 3, "admin": 1}
+# A first guess so a fresh lead is not worth nothing: Enterprise is left at 0
+# because that tier is a negotiation, never an assumption.
+STARTER_SEATS = {"worker": 20, "planner": 3, "admin": 1, "enterprise": 0}
 
 
 def _row(lead: Lead) -> dict:
@@ -275,6 +277,7 @@ def _push(session: Session, lead: Lead, user: User) -> Optional[User]:
         worker_rate=config.SEAT_RATE["worker"],
         planner_rate=config.SEAT_RATE["planner"],
         admin_rate=config.SEAT_RATE["admin"],
+        enterprise_rate=config.SEAT_RATE["enterprise"],
         stage="lead", channel="outbound_mail", owner_id=owner_id,
         notes="Found with a lead search, not spoken to yet.",
     )

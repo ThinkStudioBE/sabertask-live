@@ -1020,9 +1020,24 @@ function dealDrawer(payload) {
       + '<div class="big">' + money(deal.mrr) + '</div>';
     deal.seat_lines.forEach(function (line) {
       html += '<div class="seat-row"><div><strong>' + line.seats + '</strong> &times; ' + esc(line.label)
-        + '<div class="who">' + money(line.rate) + ' per user / month</div></div>'
-        + '<div><strong>' + money(line.mrr) + '</strong></div></div>';
+        + '<div class="who">' + (line.rate_missing ? 'price still to agree'
+          : money(line.rate) + ' per user / month') + '</div></div>'
+        + '<div><strong>' + (line.rate_missing ? '-' : money(line.mrr)) + '</strong></div></div>';
     });
+    if (deal.rate_missing) {
+      // Without this the only chance to price a negotiated tier is at creation,
+      // which is the one moment nobody has negotiated anything yet.
+      html += '<div class="seat-warn">Those seats are not in the monthly figure yet. '
+        + 'Set what was agreed and the forecast stops reading low.'
+        + deal.seat_lines.filter(function (line) { return line.rate_missing; })
+          .map(function (line) {
+            return '<div class="seat-warn-row"><label>' + esc(line.label) + ' per user / month</label>'
+              + '<input id="d-rate-' + line.key + '" type="number" min="0" step="1" placeholder="0">'
+              + '<button class="btn sm primary" data-act="save-rate" data-tier="' + line.key
+              + '" data-id="' + deal.id + '">Save</button></div>';
+          }).join('')
+        + '</div>';
+    }
     if (deal.onboarding_fee) {
       html += '<div class="seat-row"><div>Onboarding<div class="who">one-off</div></div>'
         + '<div><strong>' + money(deal.onboarding_fee) + '</strong></div></div>';
@@ -1209,18 +1224,32 @@ function newDealModal(companyId) {
     + '<div class="field"><label>Country</label><select id="m-country">'
     + option(state.meta.countries, 'BE') + '</select></div></div>'
     + '<div class="field"><label>City</label><input id="m-city"></div>'
-    + '<div class="grid3">'
+    + '<div class="grid4">'
     + state.meta.seat_tiers.map(function (tier) {
       return '<div class="field"><label>' + esc(tier.label) + '</label>'
         + '<input id="m-' + tier.key + '" type="number" min="0" value="0">'
-        + '<div class="co-sub">' + money(tier.rate) + ' / user</div></div>';
+        + '<div class="co-sub">' + (tier.custom ? 'Custom price' : money(tier.rate) + ' / user')
+        + '</div></div>';
     }).join('') + '</div>'
+    + customRateField()
     + '<div class="grid2">'
     + '<div class="field"><label>Term (months)</label><input id="m-months" type="number" value="12"></div>'
     + '<div class="field"><label>Source</label><select id="m-channel">'
     + option(state.meta.channels, 'outbound_mail') + '</select></div></div>'
     + '</div><div class="foot"><button class="btn" data-act="close-modal">Cancel</button>'
     + '<button class="btn primary" data-act="save-deal" data-company="' + (companyId || '') + '">Create</button></div>');
+}
+
+function customRateField() {
+  // Enterprise is "Custom" on Sabertask's price list, so the rep types what was
+  // negotiated. Left empty it stays 0, and the deal says its MRR reads short.
+  var custom = (state.meta.seat_tiers || []).filter(function (tier) { return tier.custom; });
+  if (!custom.length) return '';
+  return custom.map(function (tier) {
+    return '<div class="field"><label>' + esc(tier.label) + ' rate per user / month</label>'
+      + '<input id="m-rate-' + tier.key + '" type="number" min="0" step="1" placeholder="Negotiated">'
+      + '<div class="co-sub">Only needed if you sold ' + esc(tier.label) + ' seats</div></div>';
+  }).join('');
 }
 
 function completeModal(itemId, title) {
@@ -1657,6 +1686,8 @@ document.addEventListener('click', function (event) {
     var seats = {};
     state.meta.seat_tiers.forEach(function (tier) {
       seats[tier.key + '_seats'] = parseInt(document.getElementById('m-' + tier.key).value, 10) || 0;
+      var rateBox = document.getElementById('m-rate-' + tier.key);
+      if (rateBox) seats[tier.key + '_rate'] = parseFloat(rateBox.value) || 0;
     });
     api('/api/deals', {
       method: 'POST',
@@ -1674,6 +1705,18 @@ document.addEventListener('click', function (event) {
       toast('Deal created, routed to ' + (deal.owner ? deal.owner.name : 'you'));
       load();
     }).catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'save-rate') {
+    var tier = target.dataset.tier;
+    var body = {};
+    body[tier + '_rate'] = parseFloat(document.getElementById('d-rate-' + tier).value) || 0;
+    api('/api/deals/' + target.dataset.id, { method: 'PATCH', body: body })
+      .then(function () {
+        toast('Rate saved');
+        openDeal(parseInt(target.dataset.id, 10));
+        load();
+      }).catch(function (error) { toast(error.message); });
   }
 
   if (act === 'save-lost') {

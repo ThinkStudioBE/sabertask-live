@@ -86,13 +86,15 @@ class Deal(SQLModel, table=True):
     primary_contact_id: Optional[int] = Field(default=None, foreign_key="contact.id")
     title: str
 
-    plan: str = Field(default="standard")          # standard | enterprise
+    plan: str = Field(default="standard")          # derived: enterprise seats -> enterprise
     worker_seats: int = Field(default=0)
     planner_seats: int = Field(default=0)
     admin_seats: int = Field(default=0)
+    enterprise_seats: int = Field(default=0)
     worker_rate: float = Field(default=69.0)
     planner_rate: float = Field(default=139.0)
     admin_rate: float = Field(default=279.0)
+    enterprise_rate: float = Field(default=0.0)    # "Custom" on their price list
     contract_months: int = Field(default=12)
     onboarding_fee: float = Field(default=0.0)
 
@@ -171,9 +173,11 @@ class Quote(SQLModel, table=True):
     worker_seats: int
     planner_seats: int
     admin_seats: int
+    enterprise_seats: int = Field(default=0)
     worker_rate: float
     planner_rate: float
     admin_rate: float
+    enterprise_rate: float = Field(default=0.0)
     contract_months: int
     onboarding_fee: float = Field(default=0.0)
     mrr: float

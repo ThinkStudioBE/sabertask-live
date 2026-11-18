@@ -16,6 +16,7 @@ import re
 from typing import Optional, Tuple
 
 from . import config, settings_store
+from .serializers import total_seats
 
 # What the mail leans on per industry: the one thing that sector loses sleep
 # over, written the way a rep would say it rather than as a feature.
@@ -77,7 +78,7 @@ def _greeting(contact_name: Optional[str]) -> str:
 
 def facts_for(company, deal, contact, rep) -> dict:
     """Everything either drafter is allowed to use. Nothing is invented here."""
-    seats = (deal.worker_seats or 0) + (deal.planner_seats or 0) + (deal.admin_seats or 0)
+    seats = total_seats(deal)
     return {
         "company": company.name,
         "city": company.city or "",

@@ -13,7 +13,7 @@ from ..db import get_session
 from ..models import Client, Company, Contact, Deal, Note, StageEvent, Task, User
 from ..routing import owner_for_segment
 from ..serializers import (
-    contact_dict, deal_dict, deal_mrr, note_dict, total_seats, user_dict,
+    contact_dict, deal_dict, deal_mrr, note_dict, plan_for, total_seats, user_dict,
 )
 
 router = APIRouter(prefix="/api", tags=["deals"])
@@ -240,10 +240,11 @@ class DealIn(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     title: Optional[str] = None
-    plan: str = "standard"
     worker_seats: int = 0
     planner_seats: int = 0
     admin_seats: int = 0
+    enterprise_seats: int = 0
+    enterprise_rate: float = 0.0
     contract_months: int = 12
     onboarding_fee: float = 0.0
     stage: str = "lead"
@@ -286,13 +287,16 @@ def create_deal(payload: DealIn, session: Session = Depends(get_session),
     deal = Deal(
         company_id=company.id,
         title=(payload.title or "").strip() or (company.name + " - Sabertask rollout"),
-        plan=payload.plan,
         worker_seats=payload.worker_seats,
         planner_seats=payload.planner_seats,
         admin_seats=payload.admin_seats,
+        enterprise_seats=payload.enterprise_seats,
         worker_rate=config.SEAT_RATE["worker"],
         planner_rate=config.SEAT_RATE["planner"],
         admin_rate=config.SEAT_RATE["admin"],
+        # Enterprise is "Custom" on their price list, so the catalogue rate is 0
+        # and whatever the rep negotiated comes in on the payload.
+        enterprise_rate=payload.enterprise_rate or config.SEAT_RATE["enterprise"],
         contract_months=payload.contract_months,
         onboarding_fee=payload.onboarding_fee,
         stage=payload.stage,
@@ -300,6 +304,7 @@ def create_deal(payload: DealIn, session: Session = Depends(get_session),
         owner_id=owner_id,
         notes=payload.notes,
     )
+    deal.plan = plan_for(deal)
     apply_standard_step(deal, deal.stage, {})
     session.add(deal)
     session.commit()
@@ -315,13 +320,14 @@ def create_deal(payload: DealIn, session: Session = Depends(get_session),
 
 class DealPatch(BaseModel):
     title: Optional[str] = None
-    plan: Optional[str] = None
     worker_seats: Optional[int] = None
     planner_seats: Optional[int] = None
     admin_seats: Optional[int] = None
+    enterprise_seats: Optional[int] = None
     worker_rate: Optional[float] = None
     planner_rate: Optional[float] = None
     admin_rate: Optional[float] = None
+    enterprise_rate: Optional[float] = None
     contract_months: Optional[int] = None
     onboarding_fee: Optional[float] = None
     stage: Optional[str] = None
@@ -372,6 +378,7 @@ def patch_deal(deal_id: int, payload: DealPatch,
         deal.next_action = None
         deal.next_action_date = None
 
+    deal.plan = plan_for(deal)
     deal.updated_at = datetime.utcnow()
     session.add(deal)
     session.commit()

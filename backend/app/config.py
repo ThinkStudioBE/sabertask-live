@@ -66,9 +66,15 @@ def money(amount, currency=None):
 
 
 # ------------------------------------------------------------------- seats ---
-# Sabertask prices per user per month, in three role tiers. A deal therefore
-# carries three seat counts rather than one, and MRR is their sum. Rates live on
-# the deal as well as here, so a rep can discount without the catalogue moving.
+# Sabertask prices per user per month, in four tiers (their pricing page, four
+# cards, all billed "/ user / month"). A deal therefore carries a seat count per
+# tier rather than one number, and MRR is their sum. Rates live on the deal as
+# well as here, so a rep can discount without the catalogue moving.
+# Enterprise is the exception the catalogue cannot hold: the page prints
+# "Custom" where the others print a price, so its rate is 0 here and the rep
+# types the negotiated one on the deal. Until they do, the deal's MRR is short
+# by those seats, and `rate_missing` on the deal says so out loud rather than
+# letting the forecast quietly read low.
 SEAT_TIERS = [
     {
         "key": "worker",
@@ -91,11 +97,24 @@ SEAT_TIERS = [
         "rate": 279.0,
         "includes": "Everything above, plus the web dashboard, employee and shift management, invoicing and billing",
     },
+    {
+        "key": "enterprise",
+        "label": "Enterprise",
+        "audience": "Large organisations with complex integrations",
+        "rate": 0.0,
+        "custom": True,
+        "includes": "Everything in Admin, plus custom integrations (NAV, ServiceNow, other enterprise systems) and advanced reporting and configuration",
+    },
 ]
 SEAT_RATE = {tier["key"]: tier["rate"] for tier in SEAT_TIERS}
 SEAT_LABEL = {tier["key"]: tier["label"] for tier in SEAT_TIERS}
 SEAT_KEYS = [tier["key"] for tier in SEAT_TIERS]
+# Tiers whose price is negotiated per deal, not taken from the catalogue.
+SEAT_CUSTOM = [tier["key"] for tier in SEAT_TIERS if tier.get("custom")]
 
+# The plan is no longer something a rep picks: Enterprise is a seat tier now, so
+# a deal is an Enterprise deal exactly when it has Enterprise seats on it. Kept
+# as a stored field because a sent quote must keep the wording it was sent with.
 PLANS = [
     {"key": "standard", "label": "Standard"},
     {"key": "enterprise", "label": "Enterprise", "note": "Custom integrations and reporting"},

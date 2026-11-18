@@ -14,36 +14,60 @@ from .models import Client, Company, Contact, Deal, Meeting, Note, Quote, Task, 
 
 # ---------------------------------------------------------------- the money ---
 
-def seat_lines(deal: Deal):
-    """[(tier key, label, seats, rate, line MRR)] for the tiers actually bought."""
-    pairs = [
-        ("worker", deal.worker_seats, deal.worker_rate),
-        ("planner", deal.planner_seats, deal.planner_rate),
-        ("admin", deal.admin_seats, deal.admin_rate),
+def seat_pairs(holder):
+    """[(tier key, seats, rate)] off a deal or a quote, in catalogue order.
+
+    Driven by config.SEAT_KEYS rather than written out, so a new tier on their
+    price list needs a column and nothing else.
+    """
+    return [
+        (key,
+         getattr(holder, key + "_seats", 0) or 0,
+         getattr(holder, key + "_rate", 0.0) or 0.0)
+        for key in config.SEAT_KEYS
     ]
+
+
+def seat_lines(deal: Deal):
+    """One line per tier actually bought, with its own MRR.
+
+    A custom-priced tier with no rate yet is still listed: it carries the seats
+    somebody promised, and hiding it would hide why the MRR looks low.
+    """
     return [
         {
             "key": key,
             "label": config.SEAT_LABEL[key],
-            "seats": seats or 0,
-            "rate": rate or 0.0,
-            "mrr": (seats or 0) * (rate or 0.0),
+            "seats": seats,
+            "rate": rate,
+            "mrr": seats * rate,
+            "custom": key in config.SEAT_CUSTOM,
+            "rate_missing": key in config.SEAT_CUSTOM and rate <= 0,
         }
-        for key, seats, rate in pairs
-        if (seats or 0) > 0
+        for key, seats, rate in seat_pairs(deal)
+        if seats > 0
     ]
 
 
 def total_seats(deal: Deal) -> int:
-    return (deal.worker_seats or 0) + (deal.planner_seats or 0) + (deal.admin_seats or 0)
+    return sum(seats for _, seats, _ in seat_pairs(deal))
 
 
 def deal_mrr(deal: Deal) -> float:
-    return (
-        (deal.worker_seats or 0) * (deal.worker_rate or 0.0)
-        + (deal.planner_seats or 0) * (deal.planner_rate or 0.0)
-        + (deal.admin_seats or 0) * (deal.admin_rate or 0.0)
+    return sum(seats * rate for _, seats, rate in seat_pairs(deal))
+
+
+def rate_missing(deal: Deal) -> bool:
+    """True when a negotiated tier has seats but no price, so MRR reads short."""
+    return any(
+        key in config.SEAT_CUSTOM and seats > 0 and rate <= 0
+        for key, seats, rate in seat_pairs(deal)
     )
+
+
+def plan_for(deal: Deal) -> str:
+    """A deal is an Enterprise deal exactly when it has Enterprise seats."""
+    return "enterprise" if (getattr(deal, "enterprise_seats", 0) or 0) > 0 else "standard"
 
 
 def deal_acv(deal: Deal) -> float:
@@ -155,9 +179,12 @@ def deal_dict(deal: Deal, company: Optional[Company] = None,
         "worker_seats": deal.worker_seats,
         "planner_seats": deal.planner_seats,
         "admin_seats": deal.admin_seats,
+        "enterprise_seats": deal.enterprise_seats,
         "worker_rate": deal.worker_rate,
         "planner_rate": deal.planner_rate,
         "admin_rate": deal.admin_rate,
+        "enterprise_rate": deal.enterprise_rate,
+        "rate_missing": rate_missing(deal),
         "seats": total_seats(deal),
         "contract_months": deal.contract_months,
         "onboarding_fee": deal.onboarding_fee,
@@ -245,10 +272,11 @@ def quote_dict(quote: Quote):
         "number": quote.number,
         "plan": quote.plan,
         "plan_label": config.PLAN_LABEL.get(quote.plan, quote.plan),
-        "seats": (quote.worker_seats or 0) + (quote.planner_seats or 0) + (quote.admin_seats or 0),
+        "seats": total_seats(quote),
         "worker_seats": quote.worker_seats,
         "planner_seats": quote.planner_seats,
         "admin_seats": quote.admin_seats,
+        "enterprise_seats": quote.enterprise_seats,
         "contract_months": quote.contract_months,
         "onboarding_fee": quote.onboarding_fee,
         "mrr": quote.mrr,

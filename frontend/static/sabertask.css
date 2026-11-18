@@ -386,6 +386,18 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 .field textarea { min-height: 76px; resize: vertical; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
+.grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0 12px; }
+.seat-warn {
+  margin-top: 10px; padding: 9px 11px; border-radius: 8px;
+  background: rgba(245, 158, 11, .12); border: 1px solid rgba(245, 158, 11, .35);
+  color: #92400e; font-size: 12px; line-height: 1.55;
+}
+.seat-warn-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.seat-warn-row label { flex: 1; font-size: 12px; color: #92400e; }
+.seat-warn-row input { max-width: 96px; }
+/* Four seat tiers in one row: the labels run to two lines, so reserve the space
+   or the inputs sit at different heights. */
+.grid4 .field > label { min-height: 26px; display: block; }
 
 .note {
   border-left: 3px solid var(--line); padding: 2px 0 2px 13px; margin-bottom: 15px;
@@ -484,7 +496,7 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 @media (max-width: 760px) {
   .kpis { flex-direction: column; }
   .kv { grid-template-columns: 1fr; gap: 2px 0; }
-  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
 }
 
 /* Says out loud that the records are invented. The demo is reachable on a

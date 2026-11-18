@@ -146,11 +146,43 @@ share of whatever reached the stage directly above. The second one is the point.
 Demo booked is the conversion worth watching, and in a funnel measured only from the top it
 is invisible.
 
+## The four seat tiers
+
+Sabertask's price list has four cards, all billed per user per month: Worker, Worker with
+planning, Admin, and Enterprise. A deal carries a seat count per tier and MRR is their sum,
+so the value is always recurring and every screen quotes the same figure.
+
+Enterprise is the one the catalogue cannot price. Their page prints "Custom" where the
+others print an amount, so its rate here is 0 and the rep types what was negotiated, on the
+deal itself. Until they do, those seats are worth nothing in the forecast, which is a quiet
+way to read low. So the deal says it out loud: the seat line reads "price still to agree"
+instead of showing a zero, the deal carries `rate_missing`, and the drawer puts the rate box
+and a warning right under the monthly figure. On a quote the same line prints "On request"
+rather than 0 kr, because that document goes to a customer.
+
+A deal is an Enterprise deal exactly when it has Enterprise seats on it: `plan` is derived
+at write time, never picked from a dropdown, so the label on a quote cannot disagree with
+the seats on it.
+
+Adding a fifth tier means adding it to `config.SEAT_TIERS` and adding two columns to `Deal`
+and `Quote`. Nothing else: the seat maths, the modal, the drawer and the quote page all
+loop over `config.SEAT_KEYS`.
+
+## Schema changes
+
+`create_all` makes missing tables and never touches an existing one, so a new field on a
+model that already has rows behind it would deploy as a 500 on every read. `db.py` closes
+that at startup: it compares the models to the live tables and adds the columns that are
+missing, on SQLite and Postgres alike. Additive only. It adds columns and never drops,
+renames, retypes or backfills, and it stops with an error rather than guess at a type it
+does not know. A real change of shape is still a migration somebody writes by hand.
+
 ## Everything else
 
-Funnel, seats-per-role-tier MRR in DKK, quotes, clients, reports, CSV import and export,
-cold mail: unchanged from the demo, including the industry colour and name on every row.
-See that project's README for the value model and the funnel.
+Funnel, quotes, clients, reports, CSV import and export, cold mail: unchanged from the
+demo, including the industry colour and name on every row. See that project's README for
+the value model and the funnel.
 
 **Cache-bust gotcha:** `index.html` loads `app.js?v=N` and `sabertask.css?v=N`. Bump `N`
-after editing either, or the browser serves the old file. Currently `v=12`.
+after editing either, or the browser serves the old file. `login.html` carries its own
+copy of the stylesheet link, so bump that one too. Currently `v=18`.

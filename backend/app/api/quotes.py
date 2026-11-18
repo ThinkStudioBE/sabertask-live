@@ -12,7 +12,9 @@ from .. import config
 from ..auth import current_user
 from ..db import get_session
 from ..models import Company, Contact, Deal, Quote, User
-from ..serializers import deal_acv, deal_mrr, quote_dict, seat_lines
+from ..serializers import (
+    deal_acv, deal_mrr, quote_dict, seat_lines, seat_pairs, total_seats,
+)
 
 router = APIRouter(tags=["quotes"])
 
@@ -53,9 +55,11 @@ def create_quote(deal_id: int, payload: QuoteIn,
         worker_seats=deal.worker_seats,
         planner_seats=deal.planner_seats,
         admin_seats=deal.admin_seats,
+        enterprise_seats=deal.enterprise_seats,
         worker_rate=deal.worker_rate,
         planner_rate=deal.planner_rate,
         admin_rate=deal.admin_rate,
+        enterprise_rate=deal.enterprise_rate,
         contract_months=deal.contract_months,
         onboarding_fee=deal.onboarding_fee,
         mrr=deal_mrr(deal),
@@ -114,20 +118,21 @@ def quote_page(number: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="No such quote")
 
     lines = []
-    for key, seats, rate in (
-        ("worker", quote.worker_seats, quote.worker_rate),
-        ("planner", quote.planner_seats, quote.planner_rate),
-        ("admin", quote.admin_seats, quote.admin_rate),
-    ):
+    for key, seats, rate in seat_pairs(quote):
         if not seats:
             continue
         tier = next(t for t in config.SEAT_TIERS if t["key"] == key)
+        # A negotiated tier nobody priced yet must not print as "0 kr" on a
+        # document a customer is holding.
+        priced = rate > 0 or not tier.get("custom")
+        shown_rate = config.money(rate) if priced else "On request"
+        shown_line = config.money(seats * rate) if priced else "On request"
         lines.append(
             '<tr><td><strong>' + _esc(tier["label"]) + '</strong>'
             '<div class="sub">' + _esc(tier["audience"]) + ' &middot; ' + _esc(tier["includes"]) + '</div></td>'
             '<td class="num">' + str(seats) + '</td>'
-            '<td class="num">' + config.money(rate) + '</td>'
-            '<td class="num">' + config.money(seats * rate) + '</td></tr>'
+            '<td class="num">' + shown_rate + '</td>'
+            '<td class="num">' + shown_line + '</td></tr>'
         )
     if quote.onboarding_fee:
         lines.append(
@@ -138,7 +143,7 @@ def quote_page(number: str, session: Session = Depends(get_session)):
         )
 
     profile = config.SABERTASK_PROFILE
-    seats_total = (quote.worker_seats or 0) + (quote.planner_seats or 0) + (quote.admin_seats or 0)
+    seats_total = total_seats(quote)
 
     html = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
