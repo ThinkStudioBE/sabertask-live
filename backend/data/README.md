@@ -1,7 +1,7 @@
 # Register extracts
 
 `be_register.csv` is the Belgian KBO register filtered to the six industries this app
-sells into: 14,453 active legal entities with their address and whatever impersonal
+sells into: 18,906 active legal entities with their address and whatever impersonal
 mailbox the register publishes. It is committed because the thing it was made from is a
 four-gigabyte download, so without it the only way to rebuild this list is to fetch that
 download again.

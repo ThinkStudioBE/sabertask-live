@@ -38,13 +38,19 @@ import sys
 
 csv.field_size_limit(min(sys.maxsize, 2 ** 31 - 1))
 
+# Must stay in step with CODES["BE"] in app/registers.py: that is what the
+# search asks for and this is what the database holds, so a code in one and not
+# the other is a sector that silently returns nothing.
 SECTORS = {
     "81100": "facility",
+    "68321": "facility",     # residential property management, on contract
+    "68322": "facility",     # non-residential property management
     "81210": "cleaning",
     "81220": "window",
     "81290": "winter",
     "81300": "landscaping",
     "84114": "municipal",
+    "84115": "municipal",    # OCMW: the town's own care homes and service flats
 }
 
 FIELDS = ["reg_id", "name", "nace", "segment", "zipcode", "city", "street",

@@ -139,18 +139,67 @@ def name_pattern(segment):
 
 # Words that say what a company actually does, whatever tag it was filed under.
 SECTOR_WORDS = {
-    "cleaning": ["clean", "schoonmaak", "reiniging", "rengor", "rengjor", "staed",
-                 "propret", "hygien", "net "],
-    "window": ["window", "glas", "ruiten", "gevel", "vindu", "vindue", "fonster"],
-    "landscaping": ["garden", "tuin", "groen", "hoven", "landscap", "park",
-                    "anlaggning", "anlegg", "jardin", "green"],
-    "facility": ["facility", "facilit", "vastgoed", "property", "building",
-                 "ejendom", "fastighet", "service"],
-    "winter": ["winter", "snow", "sneeuw", "gladheid", "vinter", "salt", "strooi"],
-    "municipal": ["gemeente", "kommun", "commune", "stad", "city", "municipal",
-                  "vejdrift", "wegen", "public"],
+    # What these companies call themselves, in the languages of the markets
+    # that are searched on the map. Only the map needs this: a register lead
+    # already carries the activity its own authority filed it under, so nothing
+    # here can override that.
+    #
+    # Order is the rule, not decoration. `_segment_for` returns the first
+    # segment that matches, so the most specific comes first and the catch-all
+    # last. Municipal is ahead of all of them because a town's cleaning
+    # department is a town before it is a cleaner: the desk that should get it
+    # is the public-sector desk.
+    #
+    # Words are deliberately long. "glass", "property", "service" and "garden"
+    # each pulled in a trade that is not this one, and a lead filed under the
+    # wrong desk costs more than a lead not found.
+    "municipal": [
+        "gemeente", "stadsbestuur", "kommune", "kommun", "kaupunki", "kunta",
+        "municipal", "municipalit", "commune de", "ville de", "township",
+        "borough", "county council", "city of", "stad ",
+    ],
+    "window": [
+        "window clean", "windowclean", "window polish", "window wash",
+        "vinduespoler", "vinduespuds", "vinduespusser", "vindusvask",
+        "vinduspuss", "fonsterputs", "fönsterputs", "ikkunanpes",
+        "glazenwas", "ruitenwas", "glasbewassing", "glasreiniging",
+        "lavage de vitres", "nettoyage de vitres", "vitrerie",
+    ],
+    "winter": [
+        "snow", "snerydning", "snørydding", "snorydding", "brøyting",
+        "broyting", "snöröjning", "snorojning", "plogning",
+        "lumityö", "lumityo", "auraus", "sneeuwruim", "gladheid",
+        "strooidienst", "déneigement", "deneigement", "salting",
+        "saltning", "grusning", "halkbekämpning", "halkbekampning",
+        "glatføre", "glatfore", "de-icing", "deicing", "gritting",
+        "winterdienst", "winter service", "vintertjeneste", "vinterservice",
+    ],
+    "landscaping": [
+        "landscap", "lawn", "grounds maintenance", "groundscare", "hovenier",
+        "tuinaanleg", "tuinonderhoud", "tuinier", "groenonderhoud",
+        "groenvoorziening", "anlægsgartner", "anlaegsgartner",
+        "anleggsgartner", "gartner", "trädgård", "tradgard",
+        "puutarha", "viheralue", "vihertyo", "vihertyö", "paysagiste",
+        "jardinier", "espaces verts", "aménagement paysager",
+        "gardening", "garden maintenance", "gardener", "horticult",
+    ],
+    "cleaning": [
+        "cleaning", "clean", "janitorial", "schoonmaak", "poetsdienst",
+        "poetshulp", "reiniging", "reinigingsdienst", "rengøring",
+        "rengoring", "rengjøring", "rengjoring", "städ", "staed",
+        "siivous", "nettoyage", "propret", "entretien ménager",
+        "hygien", "trappevask",
+    ],
+    "facility": [
+        "facility", "facilit", "ejendomsservice", "ejendomsdrift",
+        "vicevært", "vicevaert", "eiendomsdrift", "eiendomsservice",
+        "fastighetsskötsel", "fastighetsskotsel", "fastighetsservice",
+        "kiinteistöhuolto", "kiinteistohuolto", "kiinteistöpalvelu",
+        "vastgoedbeheer", "gebouwbeheer", "property manag",
+        "property services", "building services", "building maintenance",
+        "syndic", "gestion immobili", "facilities",
+    ],
 }
-
 # Somewhere to start when the brief names no city, for the countries we happen
 # to know well. This is a convenience and never a gate: a country that is not
 # in here is searched whole, which is what makes a country added from Settings
@@ -158,11 +207,12 @@ SECTOR_WORDS = {
 SEED_CITIES = {
     "BE": ["Antwerpen", "Gent", "Brussel"],
     "NL": ["Rotterdam", "Utrecht", "Amsterdam"],
-    "LU": ["Luxembourg", "Esch-sur-Alzette"],
     "DK": ["Kobenhavn", "Aarhus", "Odense"],
     "SE": ["Stockholm", "Goteborg", "Malmo"],
     "NO": ["Oslo", "Bergen", "Trondheim"],
     "FI": ["Helsinki", "Tampere", "Turku"],
+    "US": ["Boston", "Chicago", "Denver"],
+    "CA": ["Toronto", "Montreal", "Calgary"],
 }
 
 PLACE_TYPES = ("city", "town", "municipality", "village", "suburb")
@@ -183,21 +233,39 @@ class SearchFailed(Exception):
 
 # ------------------------------------------------------------------ criteria ---
 
-CRITERIA_SYSTEM = (
-    "You turn a salesperson's brief into search criteria for Sabertask, which "
-    "sells field service management software to companies whose people work on "
-    "sites: cleaning, window cleaning, landscaping and green maintenance, "
-    "facility management, winter services, and municipal or public works.\n\n"
-    "Answer with JSON only, no prose, no code fence, in this shape:\n"
-    '{"segments": ["cleaning"], "countries": ["BE","NL"], "cities": ["Antwerpen"], '
-    '"summary": "one sentence naming what is being looked for"}\n\n'
-    "segments must come from: cleaning, window, landscaping, facility, winter, "
-    "municipal. countries from: BE, NL, LU, DK, SE, NO. Give at most three "
-    "cities, real ones, spelled as the locals write them without accents. If the "
-    "brief names no city, leave cities empty. If the brief names no country, "
-    "leave countries empty. Never invent a segment that is not in the list: pick "
-    "the closest one."
-)
+def criteria_system() -> str:
+    """The instructions for reading a brief, built when it is read.
+
+    Two things in here used to be typed out by hand and both went stale. The
+    industries are now described in Sabertask's own words, straight from
+    `config.SEGMENTS`, so the model is told who these companies actually are
+    rather than just what the key is called. And the countries come from the
+    live set, which is editable from Settings: the old text named LU, which is
+    not a market, and left out the US, Canada and Finland, which are. A model
+    cannot return a country it was told does not exist, so that list being
+    wrong quietly made three markets unreachable from a brief.
+    """
+    industries = "\n".join(
+        "- " + seg["key"] + " (" + seg["label"] + "): " + seg.get("profile", "")
+        for seg in config.SEGMENTS)
+    markets = ", ".join(row["key"] + " (" + row["label"] + ")"
+                        for row in settings_store.countries())
+    keys = ", ".join(seg["key"] for seg in config.SEGMENTS)
+    return (
+        "You turn a salesperson's brief into search criteria for Sabertask, "
+        "which sells field service management software to companies whose "
+        "people work on sites. These are the industries it sells into:\n\n"
+        + industries + "\n\n"
+        "Answer with JSON only, no prose, no code fence, in this shape:\n"
+        '{"segments": ["cleaning"], "countries": ["BE","NL"], '
+        '"cities": ["Antwerpen"], '
+        '"summary": "one sentence naming what is being looked for"}\n\n'
+        "segments must come from: " + keys + ". countries from: " + markets
+        + ". Give at most three cities, real ones, spelled as the locals write "
+        "them without accents. If the brief names no city, leave cities empty. "
+        "If the brief names no country, leave countries empty. Never invent a "
+        "segment that is not in the list: pick the closest one."
+    )
 
 
 def _keyword_criteria(brief: str) -> dict:
@@ -236,7 +304,7 @@ def criteria_from_brief(brief: str) -> dict:
                 model=config.MAIL_MODEL,
                 max_tokens=4000,
                 output_config={"effort": "low"},
-                system=CRITERIA_SYSTEM,
+                system=criteria_system(),
                 messages=[{"role": "user", "content": brief}],
             )
             if getattr(response, "stop_reason", None) in ("refusal", "max_tokens"):
@@ -259,7 +327,11 @@ def criteria_from_brief(brief: str) -> dict:
     if not segments:
         segments = ["cleaning"]
     if not countries:
-        countries = ["BE", "NL"] if not cities else []
+        # A brief that names neither a city nor a country means every market,
+        # not the two this app happened to start with. The cap is per country
+        # and the map runs on a budget that reports what it could not reach, so
+        # asking all of them is bounded in both directions.
+        countries = [] if cities else sorted(known)
     return {
         "segments": segments[:3],
         "countries": countries,

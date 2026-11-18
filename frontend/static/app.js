@@ -185,7 +185,9 @@ function renderDesk() {
   state.meta.segment_desk.forEach(function (row) {
     var on = state.segments.indexOf(row.segment) >= 0;
     var count = counts[row.segment];
-    html += '<button class="desk-pill' + (on ? ' on' : '') + '" data-seg="' + row.segment + '">'
+    var seg = (state.meta.segments || []).filter(function (x) { return x.key === row.segment; })[0];
+    html += '<button class="desk-pill' + (on ? ' on' : '') + '" data-seg="' + row.segment + '"'
+      + (seg && seg.profile ? ' title="' + esc(seg.label + ' \u2014 ' + seg.profile) + '"' : '') + '>'
       + '<span class="dot" style="background:' + row.color + '"></span>'
       + '<span class="seg">' + esc(row.short) + '</span>'
       + '<span class="rep">' + esc(row.owner ? row.owner.name.split(' ')[0] : 'unassigned') + '</span>'
@@ -204,10 +206,33 @@ function segFilter() {
   state.meta.segments.forEach(function (seg) {
     var on = state.segments.indexOf(seg.key) >= 0;
     html += '<button class="seg-chip' + (on ? ' on' : '') + '" data-seg="' + seg.key + '"'
+      + (seg.profile ? ' title="' + esc(seg.label + ' \u2014 ' + seg.profile) + '"' : '')
       + (on ? ' style="background:' + seg.color + '"' : '') + '>'
       + '<span class="dot" style="background:' + seg.color + '"></span>' + esc(seg.short) + '</button>';
   });
   return html + '</div><span class="divider"></span>';
+}
+
+// What each industry means, in Sabertask's own words. It sits on an empty
+// Leads tab because that is the moment a rep has to decide what to type, and
+// an industry name alone does not say who is behind it. The text is read off
+// sabertask.com and lives in config.SEGMENTS, not here.
+function segProfiles() {
+  if (!state.meta || !state.meta.segments) return '';
+  return '<div class="seg-profiles">'
+    + '<div class="seg-profiles-head">Who we are looking for</div>'
+    + state.meta.segments.filter(function (seg) { return seg.profile; })
+        .map(function (seg) {
+          return '<div class="seg-profile">'
+            + '<div class="seg-profile-name"><span class="dot" style="background:'
+            + seg.color + '"></span>' + esc(seg.label) + '</div>'
+            + '<div class="seg-profile-text">' + esc(seg.profile) + '</div>'
+            + (seg.pain
+                ? '<div class="seg-profile-pain">' + esc(seg.pain) + '</div>'
+                : '')
+            + '</div>';
+        }).join('')
+    + '</div>';
 }
 
 function countrySelect() {
@@ -574,7 +599,8 @@ function viewLeads() {
     return html + '<div class="empty">'
       + (state.leadStatus === 'new'
           ? 'Nothing waiting. Describe what you are after and search.'
-          : 'Nothing here yet.') + '</div></div>';
+          : 'Nothing here yet.') + '</div>'
+      + (state.leadStatus === 'new' ? segProfiles() : '') + '</div>';
   }
 
   html += '<div class="list-wrap"><table class="list"><thead><tr>'

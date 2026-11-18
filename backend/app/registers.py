@@ -94,12 +94,20 @@ CODES: Dict[str, Dict[str, List[str]]] = {
         "municipal": ["841100"],
     },
     "BE": {
-        "facility": ["81100"],
+        # Belgium splits property management by what is being managed, so both
+        # halves are here: the facility profile is the manager who holds the
+        # service agreements for a portfolio, residential or not. Leaving them
+        # out left Belgium with 835 facility companies where the other three
+        # countries all count their property managers in. It is now 5,169.
+        "facility": ["81100", "68321", "68322"],
         "cleaning": ["81210"],
         "window": ["81220"],
         "landscaping": ["81300"],
         "winter": ["81290"],
-        "municipal": ["84114"],
+        # The OCMW is a municipality's own social-care arm and runs the care
+        # homes and service flats in the town. Same crews, same buildings, same
+        # seats, and it nearly doubles what Belgium has under municipal.
+        "municipal": ["84114", "84115"],
     },
 }
 

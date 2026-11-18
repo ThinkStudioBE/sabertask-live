@@ -85,6 +85,12 @@ at every search: enterprises not establishments, active only, legal entities onl
 one-person business is filed as a natural person, whose address is their home), and
 impersonal mailboxes only.
 
+The six industries, and the words the search looks for, come from sabertask.com's own
+"Target industries" pages rather than from guesswork. `config.SEGMENTS` carries each one's
+profile and the pain Sabertask names for it, the app shows both beside the industry, and
+the prompt that reads a brief is built from them. Five of the six can be checked against
+the site; `municipal` cannot, and says so where it is defined.
+
 **A search returns at most 50 leads per country**, counted over every industry in it, so the
 total grows with the number of countries picked. The cap is `config.LEAD_CAP_PER_COUNTRY`,
 deliberately not an environment variable and not a setting, so it cannot be raised from a

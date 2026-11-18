@@ -148,14 +148,84 @@ STANDARD_STEPS = {v["step"] for v in STAGE_NEXT_STEP.values() if v["step"]}
 # lead's segment is what decides whose desk it lands on. Every list, card and
 # board in the app therefore shows the segment in its own colour, and the
 # segment filter is the first control in the filter bar.
+#
+# The first five are sabertask.com's own "Target industries", one page each, and
+# `profile` and `pain` are read off those pages rather than invented here. They
+# are not decoration: `profile` is what a rep is actually looking for when they
+# search, and `pain` is the first line of the conversation that follows. Both
+# are shown in the app beside the industry.
+#
+# `municipal` is ours and not theirs. There is no industry page for it. It is
+# here because the home page says Sabertask supports "businesses and
+# municipalities", the facility page advertises OIOXML and calls itself
+# public-sector ready, and a town that runs this work with its own crews buys
+# the same seats as a contractor. Anyone pruning this list should know that the
+# other five can be checked against the site and this one cannot.
 SEGMENTS = [
-    {"key": "cleaning", "label": "Cleaning companies", "short": "Cleaning", "color": "#4f7aa0"},
-    {"key": "window", "label": "Window cleaning", "short": "Window", "color": "#4e8a84"},
-    {"key": "landscaping", "label": "Landscaping & green maintenance", "short": "Landscaping", "color": "#5d8a5a"},
-    {"key": "facility", "label": "Facility management", "short": "Facility", "color": "#7d6c9c"},
-    {"key": "winter", "label": "Winter services", "short": "Winter", "color": "#7b818c"},
-    {"key": "municipal", "label": "Municipal & public services", "short": "Municipal", "color": "#a9864e"},
+    {
+        "key": "cleaning", "label": "Cleaning companies", "short": "Cleaning",
+        "color": "#4f7aa0",
+        "profile": "Contract cleaners working recurring service agreements: "
+                   "stairway washes, office cleaning, deep cleans, lobbies and "
+                   "hallways, on weekly, biweekly and monthly rounds.",
+        "pain": "Schedules rebuilt in Excel every week, photos in WhatsApp, "
+                "timesheets on paper, and clients ringing to ask whether anyone "
+                "actually showed up.",
+    },
+    {
+        "key": "window", "label": "Window cleaning", "short": "Window",
+        "color": "#4e8a84",
+        "profile": "Window cleaners running recurring rounds, from a team of "
+                   "two to over two hundred. The work is route-driven: many "
+                   "small stops a day, every four weeks per address.",
+        "pain": "Too much driving on badly ordered routes, forgotten "
+                "appointments, invoicing by hand on Friday afternoons, and no "
+                "proof the round was done.",
+    },
+    {
+        "key": "landscaping", "label": "Landscaping & green maintenance",
+        "short": "Landscaping", "color": "#5d8a5a",
+        "profile": "Landscape contractors with crews on seasonal contracts: "
+                   "lawn maintenance through the growing season, hedge work, "
+                   "mulching, spring and autumn clean-ups, for housing "
+                   "associations, office parks and estates.",
+        "pain": "Crews criss-crossing town in the wrong order, weather wiping "
+                "out the week's plan, callbacks that never get billed, and job "
+                "costs that only surface weeks after the job.",
+    },
+    {
+        "key": "facility", "label": "Facility management", "short": "Facility",
+        "color": "#7d6c9c",
+        "profile": "Facility and property managers running portfolios of "
+                   "dozens to hundreds of buildings, who buy and coordinate "
+                   "cleaning, window and garden work per building and carry "
+                   "the service agreements for all of it.",
+        "pain": "Service agreements scattered across spreadsheets, maintenance "
+                "lost in email threads, no proof of what was done at which "
+                "building, and tenants and owners chasing for updates.",
+    },
+    {
+        "key": "winter", "label": "Winter services", "short": "Winter",
+        "color": "#7b818c",
+        "profile": "Snow removal, salting, gritting and de-icing contractors "
+                   "dispatching trucks on weather triggers. Sabertask sells "
+                   "them a module of its own, SnowManager, and says it already "
+                   "has over five hundred of them.",
+        "pain": "Calls flooding in at four in the morning, routes built by "
+                "hand at three, customers ringing for an ETA, and disputes "
+                "afterwards about whether the site was cleared at all.",
+    },
+    {
+        "key": "municipal", "label": "Municipal & public services",
+        "short": "Municipal", "color": "#a9864e",
+        "profile": "Towns, municipalities and public bodies that run this work "
+                   "with their own crews and vehicles rather than buying it in.",
+        "pain": "The same work as a contractor's, under procurement rules and "
+                "with residents rather than clients asking where the crew is.",
+    },
 ]
+SEGMENT_PROFILE = {s["key"]: s.get("profile", "") for s in SEGMENTS}
+SEGMENT_PAIN = {s["key"]: s.get("pain", "") for s in SEGMENTS}
 SEGMENT_LABEL = {s["key"]: s["label"] for s in SEGMENTS}
 SEGMENT_SHORT = {s["key"]: s["short"] for s in SEGMENTS}
 SEGMENT_COLOR = {s["key"]: s["color"] for s in SEGMENTS}
