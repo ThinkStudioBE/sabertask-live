@@ -442,6 +442,10 @@ function viewSettings() {
     html += '<span class="set-chip">' + esc(row.flag) + ' ' + esc(row.label)
       + ' <span class="co-sub" style="margin:0">' + esc(row.key) + '</span>'
       + (row.in_use ? '<span class="chip-count">' + row.in_use + '</span>' : '')
+      + (row.register
+          ? '<span class="chip-reg" title="Searched in the official business '
+            + 'register">' + esc(row.register) + '</span>'
+          : '')
       + '<button class="chip-x" data-act="country-remove" data-code="' + esc(row.key)
       + '" title="Remove ' + esc(row.label) + '">&times;</button></span>';
   });
@@ -505,7 +509,8 @@ function viewLeads() {
     + '>' + (state.leadSearching ? 'Searching' : 'Search') + '</button>'
     + '</div>'
     + '<div class="co-sub">Name an industry and a city or a country. '
-    + 'A search returns at most ' + (data.cap_per_country || 50)
+    + 'Countries with an official business register are searched there and the '
+    + 'rest off the open map. A search returns at most ' + (data.cap_per_country || 50)
     + ' leads per country, across all industries in that search.</div>';
   if (state.leadResult) {
     var r = state.leadResult;
@@ -514,12 +519,22 @@ function viewLeads() {
       + esc((r.criteria.cities || []).join(', '))
       + (r.already_known ? ' &middot; ' + r.already_known + ' already known' : '')
       + (r.capped
-          ? ' &middot; the map had more, this run stopped at ' + r.limit + ' per country'
+          ? ' &middot; there were more, this run stopped at ' + r.limit + ' per country'
           : '')
       + ((r.skipped && r.skipped.length)
           ? ' &middot; not reached in time: ' + esc(r.skipped.join(', '))
           : '')
       + '</div>';
+    // Where each country's answer came from. The official register and the map
+    // do not hold the same companies, so two searches that look alike can be
+    // reading different sources, and a rep should be able to see which.
+    if (r.sources && r.sources.length) {
+      html += '<div class="lead-sources">' + r.sources.map(function (row) {
+        return '<span class="lead-src' + (row.source === 'map' ? ' map' : '') + '">'
+          + esc(row.country) + ': '
+          + esc(row.source === 'map' ? 'open map' : row.source) + '</span>';
+      }).join('') + '</div>';
+    }
   }
   html += '</div>';
 

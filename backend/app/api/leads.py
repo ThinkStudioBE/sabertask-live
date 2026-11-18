@@ -125,6 +125,14 @@ def run_search(payload: BriefIn, session: Session = Depends(get_session),
         "skipped": [settings_store.country_label(c)
                     for c in criteria.get("skipped_countries", [])],
         "capped": any(n >= config.LEAD_CAP_PER_COUNTRY for n in per_country.values()),
+        # Which source answered for each country. A country with an official
+        # register is searched there; the rest come off the map. Worth showing,
+        # because the two do not find the same companies and a rep comparing
+        # two searches should be able to see which one they are reading.
+        "sources": [{"country": settings_store.country_label(code),
+                     "source": name}
+                    for code, name in sorted(
+                        (criteria.get("sources") or {}).items())],
         "criteria": {
             "segments": [config.SEGMENT_SHORT.get(s, s) for s in criteria["segments"]],
             "cities": criteria.get("searched", []) or criteria.get("cities", []),

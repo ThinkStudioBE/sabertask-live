@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .. import config, settings_store
+from .. import config, registers, settings_store
 from ..auth import current_user
 from ..db import get_session
 from ..models import Company, Lead, User
@@ -51,6 +51,10 @@ def read_settings(session: Session = Depends(get_session),
     for row in settings_store.countries():
         entry = dict(row)
         entry["in_use"] = in_use.get(row["key"], 0)
+        # Which source a search will use here. Worth showing on the country
+        # itself: adding a market says nothing about how well it can be
+        # searched, and the two sources are not close in coverage.
+        entry["register"] = registers.register_for(row["key"])
         countries.append(entry)
 
     return {

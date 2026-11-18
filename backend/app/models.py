@@ -296,6 +296,38 @@ class LeadSearch(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class RegisterCompany(SQLModel, table=True):
+    """One company out of a country's official business register.
+
+    Loaded from a published extract rather than fetched per search, because the
+    countries that publish their register as a file do not also offer a query
+    API: Belgium's is a four-gigabyte download. Filtered to the six industries
+    this app sells into it is about thirty thousand rows, which is small enough
+    to keep here and search in milliseconds.
+
+    Countries whose register answers live (Norway, Finland) are not in this
+    table at all. They are asked at search time, so their rows are never stale.
+
+    `source` carries which extract this came from and when, because a register
+    file is a snapshot: a company that closed last week is still in it, and a
+    rep deserves to know how old the list is.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    country: str = Field(index=True)
+    reg_id: str = Field(index=True)          # the official company number
+    name: str
+    nace: Optional[str] = None               # the register's own activity code
+    segment: str = Field(default="facility", index=True)
+    zipcode: Optional[str] = None
+    city: Optional[str] = Field(default=None, index=True)
+    street: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    source: Optional[str] = None
+
+
 class AppSetting(SQLModel, table=True):
     """Settings somebody edited, kept in the database rather than in a file.
 

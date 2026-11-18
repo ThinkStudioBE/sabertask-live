@@ -35,17 +35,45 @@ and deal in those industries is assigned to that desk automatically.
 
 ## Leads
 
-A brief in plain words becomes real companies: Claude reads the brief once per search and
-says which industries, countries and cities to look in, Nominatim turns each city into a
-bounding box, and Overpass returns the businesses inside it carrying that industry's tags.
-Name, address, website and phone come from the map. Without an `ANTHROPIC_API_KEY` the
+A brief in plain words becomes real companies. Claude reads the brief once per search and
+says which industries, countries and cities to look in. Without an `ANTHROPIC_API_KEY` the
 brief is read with keywords instead, so the tab still works.
 
-**A search returns at most 100 leads.** The cap is `config.LEAD_HARD_CAP`, deliberately not
-an environment variable and not a setting, so it cannot be raised from a dashboard or a
-deployment by accident. It is enforced twice: `out tags center 100` in the Overpass query
-itself, so a volunteer server is never asked to do work that gets thrown away, and again
-as a clamp in the search endpoint in case a mirror ignores it.
+Then the country decides where to look. Two sources, never mixed for one country, and the
+result says which answered.
+
+**The official business register, where the country has one.** Every company is in it by
+law, filed under what it actually does, which is exactly what the map misses in these
+industries: a cleaning firm works in other people's buildings and has no shopfront for
+anybody to map. Measured in Antwerp, same two industries: register 37 facility companies
+against the map's 1, and 256 cleaning companies against 13.
+
+| | register | how |
+|---|---|---|
+| BE | KBO | published as a 4 GB download, filtered and loaded ahead of time |
+| NO | Enhetsregisteret | live JSON API, no key, and it carries employee counts |
+| FI | PRH / YTJ | live JSON API, no key |
+| DK | CVR | free, but granted by email after a signed declaration. Not applied for |
+| SE | — | Bolagsverket does not register industry codes at all |
+| NL | — | the KVK API cannot search by activity, only name, street and place |
+| US / CA | — | no national register with activity codes |
+
+**The open map, for the rest.** Nominatim turns each city into a bounding box and Overpass
+returns the businesses inside it carrying that industry's tags. A country whose register
+cannot be reached falls back here rather than reporting that it has no companies in it.
+
+Belgium's rows are prepared by `backend/tools/extract_kbo.py` and loaded with
+`python -m app.load_register`. The extract is where four rules are enforced once instead of
+at every search: enterprises not establishments, active only, legal entities only (a
+one-person business is filed as a natural person, whose address is their home), and
+impersonal mailboxes only.
+
+**A search returns at most 50 leads per country**, counted over every industry in it, so the
+total grows with the number of countries picked. The cap is `config.LEAD_CAP_PER_COUNTRY`,
+deliberately not an environment variable and not a setting, so it cannot be raised from a
+dashboard or a deployment by accident. On the map path it is enforced twice: in the
+Overpass query itself, so a volunteer server is never asked to do work that gets thrown
+away, and again as a clamp in the search endpoint in case a mirror ignores it.
 
 Leads sit apart from the pipeline until somebody adds one. Adding creates the company and
 a deal at `lead`, routed to the desk that owns its industry, and carries the published

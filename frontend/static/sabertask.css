@@ -541,6 +541,15 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 .lead-brief-row .mail-input { flex: 1; }
 .lead-result { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line-soft);
                font-size: 12.5px; color: var(--muted); }
+/* Which source answered, per country. The register reads as the stronger one
+   because it is, so the map gets the quieter badge. */
+.chip-reg { font: 600 10px Inter, sans-serif; text-transform: uppercase;
+            letter-spacing: .4px; padding: 2px 6px; border-radius: 4px;
+            background: var(--brand-100); color: var(--brand); margin-left: 6px; }
+.lead-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.lead-src { font: 600 11px Inter, sans-serif; padding: 3px 8px; border-radius: 999px;
+            background: var(--brand-100); color: var(--brand); white-space: nowrap; }
+.lead-src.map { background: var(--line-soft); color: var(--muted); }
 .lead-history { background: var(--card); border: 1px solid var(--line);
                 border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
 .lead-history-head { font: 700 10.5px Inter, sans-serif; text-transform: uppercase;

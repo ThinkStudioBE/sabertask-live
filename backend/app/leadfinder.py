@@ -1,10 +1,17 @@
-"""Find leads: a plain-English brief turned into real companies on the map.
+"""Find leads: a plain-English brief turned into real companies.
 
-The search itself is free and keyless. Nominatim resolves each city to a box,
-Overpass returns every business inside it that carries one of the tags we are
-after, and OpenStreetMap already holds the name, address, website and phone. A
-run costs nothing but time, which matters for a tool a sales floor is meant to
-use daily rather than once.
+Two sources, and the country decides which. Where the country publishes an
+official business register that can be searched by activity, that is the
+source, because every company is in it by law and these industries are the ones
+the map misses: in Antwerp the register holds 256 cleaning companies and the
+map holds 13. `registers.py` has the per-country detail and the list of markets
+that have no usable register, which fall through to the map below.
+
+The map is the fallback and is free and keyless. Nominatim resolves each city
+to a box, Overpass returns every business inside it that carries one of the
+tags we are after, and OpenStreetMap already holds the name, address, website
+and phone. A run costs nothing but time, which matters for a tool a sales floor
+is meant to use daily rather than once.
 
 Claude only reads the brief and says what to look for. That is one call per
 search, not one per lead, and when it is unavailable the brief is read with
@@ -20,10 +27,10 @@ refuse its handshake while `curl` on the same host reaches them fine, which is
 why a transport error falls through to a curl subprocess instead of being taken
 for a mirror being down.
 
-Everything that comes back is a real company off the public map. There is no
-stand-in data in this module and there must never be: this build is the one
-pointed at real prospects, and a fictional row here is one nobody downstream
-can tell from a found one.
+Everything that comes back is a real company, off an official register or off
+the public map. There is no stand-in data in this module and there must never
+be: this build is the one pointed at real prospects, and a fictional row here
+is one nobody downstream can tell from a found one.
 """
 
 import json
@@ -35,7 +42,7 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
-from . import config, settings_store
+from . import config, registers, settings_store
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Several mirrors, tried in order. They are run by volunteers and any one of
@@ -520,11 +527,21 @@ def _size_points(field_staff: Optional[int]) -> int:
     how complete its record happens to be. Seats are per person in the field,
     so a bigger crew is a bigger deal, and a size nobody knows yet is treated as
     small rather than as a blank.
+
+    The bands run past a thousand because the Norwegian register publishes
+    employee counts and the real ones go that high: ISS has ten thousand people
+    in Oslo alone. Stopping at two hundred put that company in the same bucket
+    as a firm fifty times smaller, which is the one comparison this number
+    exists to make.
     """
     if not field_staff:
         return 5
+    if field_staff >= 1000:
+        return 30
+    if field_staff >= 500:
+        return 26
     if field_staff >= 200:
-        return 20
+        return 22
     if field_staff >= 120:
         return 15
     if field_staff >= 60:
@@ -590,16 +607,11 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
         raise SearchFailed("Nothing to search. Name an industry and a city or "
                            "a country in the brief.", criteria)
 
-    if map_is_down():
-        criteria["searched"] = [c for _code, cities in plan for c in cities]
-        raise SearchFailed("The map was unreachable a moment ago, so this search "
-                           "did not wait for it again.", criteria)
-
     live = set(settings_store.country_codes())
 
     # Group the plan by country. A city whose country the brief did not give is
     # placed by the geocoder; if that refuses us, the city is tried inside every
-    # country in the set, which the query can do by name on its own.
+    # country in the set, which both sources can do by name on their own.
     cities_by_country = {}
     floating = []
     for code, cities in plan:
@@ -637,74 +649,154 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
         raise SearchFailed("Nothing to search. Name an industry and a city or "
                            "a country in the brief.", criteria)
 
-    # One query per country, and the budget is spent in the order they were
-    # asked for: a country that is never reached is reported rather than
-    # silently returning nothing.
-    deadline = time.time() + MAP_BUDGET
-    elements_by_country = {}
+    cap = config.LEAD_CAP_PER_COUNTRY
+    leads = []
+    sources = {}
     skipped = []
     failure = None
+
+    # The register first, where the country has one. It is both better and
+    # faster: one indexed lookup against an official list instead of a scan of
+    # a volunteer map, and it holds the companies that never had a shopfront to
+    # map. A country whose register cannot be reached is not reported empty, it
+    # is handed to the map below.
+    on_the_map = []
     for code in sorted(cities_by_country):
-        if time.time() > deadline:
-            skipped.append(code)
+        if not registers.has_register(code):
+            on_the_map.append(code)
             continue
         try:
-            elements_by_country[code] = _overpass(
-                _query(tags, code, cities_by_country[code],
-                       segments=criteria["segments"]))
-        except SearchFailed as error:
-            failure = error
-            skipped.append(code)
+            rows = registers.search(code, criteria["segments"],
+                                    cities_by_country[code], cap)
+        except registers.RegisterFailed as error:
+            print("[leads] " + code + " register unavailable, falling back to "
+                  "the map: " + str(error)[:160])
+            _note(registers.register_for(code) or code, str(error)[:80])
+            on_the_map.append(code)
+            continue
+        sources[code] = registers.register_for(code)
+        for row in rows[:cap]:
+            leads.append(_from_register(row))
+
+    # Then the map, for everything else, on a budget. The budget is the proxy
+    # in front of this app cutting a request off at a hundred seconds: a country
+    # that is never reached is reported rather than silently returning nothing.
+    if on_the_map:
+        if map_is_down():
+            skipped.extend(on_the_map)
+            failure = SearchFailed(
+                "The map was unreachable a moment ago, so this search did not "
+                "wait for it again.", criteria)
+        else:
+            deadline = time.time() + MAP_BUDGET
+            for code in on_the_map:
+                if time.time() > deadline:
+                    skipped.append(code)
+                    continue
+                try:
+                    elements = _overpass(
+                        _query(tags, code, cities_by_country[code],
+                               segments=criteria["segments"]))
+                except SearchFailed as error:
+                    failure = error
+                    skipped.append(code)
+                    continue
+                sources[code] = "map"
+                kept = 0
+                for element in elements:
+                    if kept >= cap:
+                        break   # a mirror that ignored the cap does not get to
+                    lead = _from_element(element, code, criteria, live)
+                    if lead is None:
+                        continue
+                    leads.append(lead)
+                    kept += 1
+
     criteria["skipped_countries"] = skipped
-    if not elements_by_country:
+    criteria["sources"] = sources
+    if not sources:
         if failure is not None:
             failure.criteria = criteria
             raise failure
-        raise SearchFailed("No OpenStreetMap server is answering right now.", criteria)
+        raise SearchFailed("No source answered for any of these countries.",
+                           criteria)
 
-    leads = []
-    for code, elements in elements_by_country.items():
-        kept = 0
-        for element in elements:
-            if kept >= config.LEAD_CAP_PER_COUNTRY:
-                break       # a mirror that ignored the cap does not get to
-            tags_on = element.get("tags", {})
-            name = _clean(tags_on.get("name"))
-            if not name:
-                continue
-            city = _clean(tags_on.get("addr:city"))
-            country = (tags_on.get("addr:country") or "").upper()
-            if country not in live:
-                # The query was bounded by this country's own border, so the
-                # country is known even when the record does not carry it.
-                country = code
-            street = _clean(tags_on.get("addr:street"))
-            if street and tags_on.get("addr:housenumber"):
-                street = street + " " + str(tags_on["addr:housenumber"])[:12]
-
-            segment = _segment_for(name, criteria["segments"], element)
-            matched_name = any(word.strip() in name.lower()
-                               for word in SECTOR_WORDS.get(segment, []))
-            matched_tag = any(
-                tags_on.get(tag.partition("=")[0]) == tag.partition("=")[2]
-                for tag in SECTOR_TAGS.get(segment, [])
-            )
-            lead = {
-                "osm_id": str(element.get("type", "")) + "/" + str(element.get("id", "")),
-                "name": name,
-                "segment": segment,
-                "country": country,
-                "city": city,
-                "street": street,
-                "website": _clean(tags_on.get("website") or tags_on.get("contact:website")),
-                "phone": _clean(tags_on.get("phone") or tags_on.get("contact:phone")),
-                "email": _clean(tags_on.get("email") or tags_on.get("contact:email")),
-                "matched_name": matched_name,
-                "matched_tag": matched_tag,
-            }
-            lead["score"] = _score(lead)
-            leads.append(lead)
-            kept += 1
-
-    leads.sort(key=lambda row: -row["score"])
+    # Score first, then crew size. Two companies can score the same and not be
+    # the same prospect at all: seats are per person in the field, so where the
+    # size is known it breaks the tie, and where it is not the lead keeps its
+    # place rather than dropping below everything that happens to have a number.
+    leads.sort(key=lambda row: (-row["score"], -(row.get("field_staff") or 0)))
     return criteria, leads
+
+
+def _from_register(row: dict) -> dict:
+    """A register row as a lead.
+
+    `matched_tag` is true by definition here: the company is filed under this
+    activity by the authority it files with, which is a stronger statement than
+    a tag somebody typed on a map.
+
+    `matched_name` is deliberately false, which is not the same as saying the
+    name does not match. That signal exists for the map, where the name is the
+    only clue about what a business does. Here the activity is already known
+    from the register, so scoring the name again rewards a coincidence: ISS has
+    ten thousand people in Oslo and Coor sixteen hundred, and the only reason
+    Coor outranked them was the word "cleaning" sitting in its company name.
+    """
+    name = _clean(row.get("name")) or ""
+    segment = row.get("segment") or "facility"
+    lead = {
+        "osm_id": row["source_id"],
+        "name": name,
+        "segment": segment,
+        "country": row.get("country"),
+        "city": _clean(row.get("city")),
+        "street": _clean(row.get("street")),
+        "website": _clean(row.get("website")),
+        "phone": _clean(row.get("phone")),
+        "email": _clean(row.get("email")),
+        "field_staff": row.get("field_staff"),
+        "matched_name": False,
+        "matched_tag": True,
+    }
+    lead["score"] = _score(lead)
+    return lead
+
+
+def _from_element(element: dict, code: str, criteria: dict,
+                  live: set) -> Optional[dict]:
+    """One Overpass element as a lead, or None when it is not usable."""
+    tags_on = element.get("tags", {})
+    name = _clean(tags_on.get("name"))
+    if not name:
+        return None
+    country = (tags_on.get("addr:country") or "").upper()
+    if country not in live:
+        # The query was bounded by this country's own border, so the country is
+        # known even when the record does not carry it.
+        country = code
+    street = _clean(tags_on.get("addr:street"))
+    if street and tags_on.get("addr:housenumber"):
+        street = street + " " + str(tags_on["addr:housenumber"])[:12]
+
+    segment = _segment_for(name, criteria["segments"], element)
+    lead = {
+        "osm_id": str(element.get("type", "")) + "/" + str(element.get("id", "")),
+        "name": name,
+        "segment": segment,
+        "country": country,
+        "city": _clean(tags_on.get("addr:city")),
+        "street": street,
+        "website": _clean(tags_on.get("website") or tags_on.get("contact:website")),
+        "phone": _clean(tags_on.get("phone") or tags_on.get("contact:phone")),
+        "email": _clean(tags_on.get("email") or tags_on.get("contact:email")),
+        "field_staff": None,
+        "matched_name": any(word.strip() in name.lower()
+                            for word in SECTOR_WORDS.get(segment, [])),
+        "matched_tag": any(
+            tags_on.get(tag.partition("=")[0]) == tag.partition("=")[2]
+            for tag in SECTOR_TAGS.get(segment, [])
+        ),
+    }
+    lead["score"] = _score(lead)
+    return lead
