@@ -43,8 +43,18 @@ def reports(session: Session = Depends(get_session), user: User = Depends(curren
             "ever_reached": reached,
         })
     first = funnel[0]["ever_reached"] or 1
+    previous = None
     for row in funnel:
         row["conversion"] = round(100.0 * row["ever_reached"] / first)
+        # And the step on its own. Conversion from the top of the funnel tells
+        # you the pipeline is leaking; this tells you where. It is the reason
+        # Engaged exists as a stage: of the people who came as far as the
+        # website, how many of them booked anything. That number is invisible
+        # in a percentage measured against Lead.
+        row["step_conversion"] = (
+            None if previous is None or not previous["ever_reached"]
+            else round(100.0 * row["ever_reached"] / previous["ever_reached"]))
+        previous = row
 
     # ---------------------------------------------- the industry breakdown ---
     # The floor is split by industry, so this is the report people actually
@@ -109,7 +119,8 @@ def reports(session: Session = Depends(get_session), user: User = Depends(curren
         ch_won = [d for d in own if d.stage == "won"]
         ch_lost = [d for d in own if d.stage == "lost"]
         decided = len(ch_won) + len(ch_lost)
-        engaged = [d for d in own if d.stage not in {"lead", "contacted", "lost"}]
+        engaged = [d for d in own
+                   if d.stage not in set(config.PRE_ENGAGEMENT_STAGES) | {"lost"}]
         channels.append({
             "channel": channel["key"],
             "label": channel["label"],

@@ -453,7 +453,10 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
   display: flex; align-items: center; padding-left: 9px; color: #fff;
   font: 700 11.5px Inter, sans-serif; min-width: 2px;
 }
-.funnel-row .pc { width: 60px; text-align: right; color: var(--muted); font-size: 12px; }
+.funnel-row .pc { width: 52px; text-align: right; color: var(--muted); font-size: 12px; }
+/* The step-to-step figure, next to the one measured from the top. Darker,
+   because it is the one that says where the funnel actually leaks. */
+.funnel-row .pc.step { width: 46px; color: var(--ink); font-weight: 600; }
 
 .health { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 

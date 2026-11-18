@@ -109,17 +109,39 @@ TRIAL_DAYS = 30  # Sabertask gives 30 days of full access
 # bought: a demo, then scoping of the service agreements, then the free trial,
 # then paper.
 STAGES = [
-    {"key": "lead", "label": "Lead", "probability": 5},
-    {"key": "contacted", "label": "Contacted", "probability": 10},
-    {"key": "demo", "label": "Demo booked", "probability": 25},
-    {"key": "scoping", "label": "Scoping", "probability": 40},
-    {"key": "trial", "label": "Trial", "probability": 60},
-    {"key": "proposal", "label": "Proposal", "probability": 80},
-    {"key": "won", "label": "Won", "probability": 100},
+    {"key": "lead", "label": "Lead", "probability": 5,
+     "hint": "Sourced, not contacted"},
+    {"key": "contacted", "label": "Contacted", "probability": 10,
+     "hint": "Written to, nothing back"},
+    # Between the mail and the meeting there is a gap that used to be invisible.
+    # Somebody opens the mail, clicks through to sabertask.com, reads the page
+    # for their industry, maybe opens the booking form, and then does not book.
+    # Filed under Contacted that person looks identical to someone who never
+    # reacted at all, and they are not: they are the warmest thing in the
+    # pipeline short of a booked demo, and the window to call them is short.
+    #
+    # It is a stage rather than a flag because the question it answers is "how
+    # many of the people we interested did we fail to convert", and a funnel is
+    # the only thing that answers that. The drop from Engaged to Demo booked is
+    # the number worth watching: a bad one means the mail is doing its job and
+    # the follow-up is not.
+    {"key": "engaged", "label": "Engaged", "probability": 15,
+     "hint": "Visited the site or started booking, no demo yet"},
+    {"key": "demo", "label": "Demo booked", "probability": 25,
+     "hint": "Meeting in the diary"},
+    {"key": "scoping", "label": "Scoping", "probability": 40,
+     "hint": "Demo done, working out the fit"},
+    {"key": "trial", "label": "Trial", "probability": 60,
+     "hint": "30-day trial running"},
+    {"key": "proposal", "label": "Proposal", "probability": 80,
+     "hint": "Seats and price on the table"},
+    {"key": "won", "label": "Won", "probability": 100,
+     "hint": "Signed, rolling out"},
 ]
 EXTRA_STAGES = [
-    {"key": "lost", "label": "Lost", "probability": 0},
-    {"key": "nurture", "label": "Nurture", "probability": 5},
+    {"key": "lost", "label": "Lost", "probability": 0, "hint": "Closed out"},
+    {"key": "nurture", "label": "Nurture", "probability": 5,
+     "hint": "Parked, revisit later"},
 ]
 ALL_STAGES = STAGES + EXTRA_STAGES
 STAGE_LABEL = {s["key"]: s["label"] for s in ALL_STAGES}
@@ -132,6 +154,10 @@ BOARD_STAGES = [s["key"] for s in STAGES]
 STAGE_NEXT_STEP = {
     "lead": {"step": "Send the intro mail", "days": None},
     "contacted": {"step": "Follow-up call", "days": 3},
+    # Two days, not three. Somebody who has just been on the site is warm now
+    # and cold by the end of the week, and the whole point of noticing the
+    # visit is to ring while they still remember making it.
+    "engaged": {"step": "Call while the visit is fresh", "days": 2},
     "demo": {"step": "Run the demo", "days": 5},
     "scoping": {"step": "Send the scoping summary", "days": 3},
     "trial": {"step": "Check in on trial usage", "days": 7},
@@ -141,6 +167,13 @@ STAGE_NEXT_STEP = {
     "nurture": {"step": None, "days": None},
 }
 STANDARD_STEPS = {v["step"] for v in STAGE_NEXT_STEP.values() if v["step"]}
+STAGE_HINT = {s["key"]: s.get("hint", "") for s in ALL_STAGES}
+
+# Nobody at these stages has shown us anything yet. Named here rather than
+# written out wherever it is needed, because the day a stage is added the
+# question "has this prospect reacted to us" has to move with it, and a set of
+# keys typed into a report is exactly the thing that does not move.
+PRE_ENGAGEMENT_STAGES = ("lead", "contacted")
 
 # ---------------------------------------------------------------- segments ---
 # The industries Sabertask names on its own site. These are not a cosmetic tag:

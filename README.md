@@ -127,6 +127,25 @@ one instance that can prove the pipeline end to end when the others are blocked.
 
 Set `OVERPASS_URLS` to a comma-separated list to override the mirrors.
 
+## The funnel
+
+Lead, Contacted, **Engaged**, Demo booked, Scoping, Trial, Proposal, Won, with Lost and
+Nurture off the board. The stages, their odds and the next step each one brings are all in
+`config.STAGES` and `config.STAGE_NEXT_STEP`, so adding one is a single edit.
+
+Engaged is the stage between the mail and the meeting. Somebody opens the mail, clicks
+through to sabertask.com, reads the page for their industry, maybe opens the booking form,
+and then does not book. Filed under Contacted that person is indistinguishable from
+somebody who never reacted at all, and they are not the same: they are the warmest thing in
+the pipeline short of a booked demo, and the window to ring them is short. The stage brings
+a two-day next step for that reason, where Contacted gets three.
+
+It is a stage rather than a flag because of the question it answers. The Reports funnel now
+shows two percentages per row: the share of everything that ever reached Lead, and the
+share of whatever reached the stage directly above. The second one is the point. Engaged to
+Demo booked is the conversion worth watching, and in a funnel measured only from the top it
+is invisible.
+
 ## Everything else
 
 Funnel, seats-per-role-tier MRR in DKK, quotes, clients, reports, CSV import and export,

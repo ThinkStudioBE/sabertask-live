@@ -349,11 +349,13 @@ function boardHtml(data) {
   var html = '<div class="board">';
   stages.forEach(function (key) {
     var list = byStage[key] || [];
-    var label = (state.meta.stages.concat(state.meta.extra_stages)
-      .filter(function (s) { return s.key === key; })[0] || {}).label || key;
+    var stage = state.meta.stages.concat(state.meta.extra_stages)
+      .filter(function (s) { return s.key === key; })[0] || {};
+    var label = stage.label || key;
     var sum = list.reduce(function (total, deal) { return total + deal.mrr; }, 0);
     html += '<div class="col" data-stage="' + key + '">'
-      + '<h3><span>' + esc(label) + ' <span class="count-pill">' + list.length + '</span></span>'
+      + '<h3' + (stage.hint ? ' title="' + esc(stage.hint) + '"' : '') + '>'
+      + '<span>' + esc(label) + ' <span class="count-pill">' + list.length + '</span></span>'
       + '<span class="col-mrr">' + moneyShort(sum) + '</span></h3>';
     list.forEach(function (deal) {
       html += '<div class="deal-card" draggable="true" data-deal="' + deal.id + '">'
@@ -875,7 +877,15 @@ function viewReports() {
     html += '<div class="funnel-row"><span class="nm">' + esc(row.label) + '</span>'
       + '<span class="track"><span class="fill" style="width:' + width + '%">'
       + (row.ever_reached || '') + '</span></span>'
-      + '<span class="pc">' + row.conversion + '%</span></div>';
+      + '<span class="pc" title="Share of everything that ever reached Lead">'
+      + row.conversion + '%</span>'
+      // The step on its own, which is the number that says where the leak is.
+      + '<span class="pc step"'
+      + (row.step_conversion === null || row.step_conversion === undefined
+          ? '>&middot;'
+          : ' title="Of those that reached the stage above">'
+            + row.step_conversion + '%')
+      + '</span></div>';
   });
   html += '</div>';
 
