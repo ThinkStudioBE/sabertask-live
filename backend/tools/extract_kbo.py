@@ -52,6 +52,12 @@ FIELDS = ["reg_id", "name", "nace", "segment", "zipcode", "city", "street",
 
 # A mailbox at a webmail provider is somebody's personal inbox that happens to
 # be used for work. A company publishes one on its own domain.
+#
+# The Danish providers are here because this rule is also what the Danish
+# register adapter in app/registers.py calls: one rule about whose mailbox this
+# is, in one place, so Belgium and Denmark cannot drift apart on it. Several of
+# the Danish entries are the mailboxes an internet subscription came with, which
+# is as personal as an address gets.
 WEBMAIL = {
     "gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "hotmail.fr",
     "outlook.com", "outlook.be", "live.com", "live.be", "live.fr", "msn.com",
@@ -60,6 +66,9 @@ WEBMAIL = {
     "belgacom.net", "base.be", "pandora.be", "aol.com", "gmx.com", "gmx.net",
     "protonmail.com", "proton.me", "zoho.com", "mail.com", "orange.fr",
     "wanadoo.fr", "free.fr", "laposte.net", "numericable.be", "edpnet.be",
+    "hotmail.dk", "live.dk", "yahoo.dk", "outlook.dk", "mail.dk", "privat.dk",
+    "post.tele.dk", "mail.tele.dk", "tdcadsl.dk", "stofanet.dk", "webspeed.dk",
+    "youmail.dk", "jubii.dk", "sol.dk", "image.dk", "get2net.dk", "c.dk",
 }
 
 # Words that make a mailbox a department or a function rather than a person. A
@@ -85,6 +94,14 @@ ROLES = {
     "mairie", "gemeentehuis", "dienst", "diensten", "college", "burgemeester",
     "schepen", "financieeldirecteur", "algemeendirecteur", "ocmw", "raad",
     "beleid", "technischedienst", "milieu", "openbarewerken",
+    # Danish, for the CVR adapter. A Danish company's own mailbox is kontakt@
+    # or salg@ far more often than it is contact@ or sales@, so without these
+    # the rule would throw away most of what CVR actually publishes.
+    "kontakt", "kontakten", "salg", "salgsafdeling", "kontor", "kontoret",
+    "regnskab", "bogholderi", "faktura", "fakturering", "ledelse", "direktion",
+    "personale", "drift", "teknik", "kundeservice", "bestilling", "ordrer",
+    "tilbud", "forvaltning", "afdeling", "raadhus", "kommunen", "borgmester",
+    "vinduespolering", "gartner", "ejendomsservice", "vicevaert", "vaerksted",
 }
 
 

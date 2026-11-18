@@ -18,8 +18,10 @@ reason this module is a lookup table rather than one function:
     BE   the KBO open-data extract, loaded into this database. Free.
     NO   Enhetsregisteret, live JSON API, no key, no registration.
     FI   PRH avoindata, live JSON API, no key, no registration.
-    DK   the CVR system interface is free but granted by email, after a signed
-         declaration, in up to three weeks. Not wired up: nobody has applied.
+    DK   CVR, which is Erhvervsstyrelsen's own Elasticsearch. Free, but not
+         open: a user id and a password are issued by email after a signed
+         declaration, in up to three weeks. The adapter below is written and
+         switched off, waiting on CVR_USER and CVR_PASSWORD.
     SE   Bolagsverket does not register industry codes at all; the codes come
          from the statistics office and its company data needs an agreement.
     NL   the KVK API has no activity-code search. Name, street and place only,
@@ -27,14 +29,16 @@ reason this module is a lookup table rather than one function:
     US   no national register. Fifty state registers, no shared code system.
     CA   no national register with activity codes either.
 
-Those six stay on the map. A country nobody has written an adapter for simply
-falls through, so adding a country in Settings keeps working the way it did.
+SE, NL, US and CA stay on the map, and Denmark with them until its
+credentials arrive. A country nobody has written an adapter for simply falls
+through, so adding a country in Settings keeps working the way it did.
 
 There is no stand-in data here, as everywhere in this build: a register row is
 a real company or there is no row.
 """
 
 import json
+import os
 import subprocess
 from typing import Dict, List, Optional
 
@@ -50,6 +54,20 @@ USER_AGENT = "sabertask-sales/1.0 (business register lookup)"
 # Norway does not split 81.29, so winter work sits with the gardeners, which is
 # also where the map puts it: in Norway the firm that cuts the grass is the firm
 # that clears the snow. Finland does split it, into street cleaning and other.
+#
+# Denmark subdivides further than either, so three of its six are not simply the
+# Danish spelling of the same number:
+#
+#   * 81.22 becomes three codes. 812210 vinduespolering is window cleaning on
+#     its own, 812220 is chimney sweeping and 812290 is the rest of the building
+#     and industrial cleaning. Only 812210 is the window segment, which leaves
+#     the chimney sweeps out of a list they do not belong on.
+#   * 68.32 becomes 683210, managing property under contract, and 683220,
+#     ejerforeninger. An ejerforening is a building's owners' association: it
+#     buys this work rather than sells it, so only 683210 is a prospect.
+#   * Snow is not split off at all. It sits in 812900, andre rengoeringsydelser,
+#     with the rest of the outdoor cleaning, which is also where the European
+#     class puts snow and ice removal.
 CODES: Dict[str, Dict[str, List[str]]] = {
     "NO": {
         "facility": ["81.100", "68.320"],
@@ -67,6 +85,14 @@ CODES: Dict[str, Dict[str, List[str]]] = {
         "winter": ["81291", "81299"],
         "municipal": ["84110"],
     },
+    "DK": {
+        "facility": ["811000", "683210"],
+        "cleaning": ["812100"],
+        "window": ["812210"],
+        "landscaping": ["813000"],
+        "winter": ["812900"],
+        "municipal": ["841100"],
+    },
     "BE": {
         "facility": ["81100"],
         "cleaning": ["81210"],
@@ -80,6 +106,7 @@ CODES: Dict[str, Dict[str, List[str]]] = {
 REGISTER_NAMES = {
     "NO": "Enhetsregisteret",
     "FI": "PRH / YTJ",
+    "DK": "CVR",
     "BE": "KBO",
 }
 
@@ -89,8 +116,15 @@ class RegisterFailed(Exception):
 
 
 def register_for(code: str) -> Optional[str]:
-    """The register's name for a country, or None when it has none here."""
-    return REGISTER_NAMES.get((code or "").upper())
+    """The register's name for a country, or None when it has none here.
+
+    None also covers a register that exists but cannot be reached yet, which at
+    the moment means Denmark without its credentials. Settings shows this name
+    on the country to say where a search will go, so a name here that the search
+    does not actually use would be a label that lies.
+    """
+    code = (code or "").upper()
+    return REGISTER_NAMES.get(code) if _usable(code) else None
 
 
 def _get_json(url: str, params: dict) -> dict:
@@ -360,17 +394,344 @@ def _belgium(segments: List[str], cities: List[str], cap: int) -> List[dict]:
     } for row in rows]
 
 
+# ------------------------------------------------------------------- Denmark ---
+#
+# CVR's system interface: Erhvervsstyrelsen's own Elasticsearch, documented at
+# erhvervsstyrelsen.dk/kom-godt-igang-med-elasticSearch. Free to use and free to
+# apply for, but not open. A user id and password are issued by email after a
+# signed declaration, and the published turnaround is up to three weeks.
+#
+# UNTESTED, and deliberately so rather than by neglect. There are no credentials
+# on this machine, the endpoint answers 401 without them, and so not one line
+# below has seen a real response. It is written against that guide for the field
+# paths, the Basic auth, the query DSL and the ten-document default, and against
+# the field names used by open-source clients of the same endpoint. Two things
+# follow from being unable to run it:
+#
+#   * Where the guide does not settle a detail, the spot says "unverified" and
+#     what was assumed instead.
+#   * A wrong field path in an Elasticsearch filter does not fail. It matches
+#     nothing, which reads exactly like "Denmark has no cleaning companies",
+#     the one answer this module forbids. So an empty answer is probed before
+#     it is believed, at the end of `_denmark`.
+
+# The guide's own examples write plain http and Basic auth, so the password
+# travels in clear to a government host. That is Erhvervsstyrelsen's choice of
+# transport rather than one made here; whether https also answers is worth a
+# try on the first day there is a password to try it with.
+CVR_URL = "http://distribution.virk.dk/cvr-permanent/virksomhed/_search"
+
+# Every field path the queries use, in one place: they are the one part of this
+# adapter most likely to need a correction once a real response arrives.
+_CVR_ROOT = "Vrvirksomhed"
+_CVR_META = _CVR_ROOT + ".virksomhedMetadata"
+_CVR_BRANCHE = _CVR_META + ".nyesteHovedbranche.branchekode"
+_CVR_POSTDISTRIKT = _CVR_META + ".nyesteBeliggenhedsadresse.postdistrikt"
+_CVR_KOMMUNE = _CVR_META + ".nyesteBeliggenhedsadresse.kommune.kommuneNavn"
+_CVR_STAFF = _CVR_META + ".nyesteAarsbeskaeftigelse.antalAnsatte"
+
+# sammensatStatus is the register's own plain-language status, and the guide
+# points at it as the field that holds the real answer. Only a status that says
+# the company is finished or on its way there keeps it off the list. Anything
+# unrecognised is kept: a word nobody here has seen before is not evidence that
+# a company is gone.
+CVR_DEAD = ("OPHOER", "OPH\u00d8R", "OPLOES", "OPL\u00d8S", "SLETTET",
+            "KONKURS", "LIKVIDATION", "TVANGS")
+
+
+def _cvr_auth():
+    """The CVR credentials, or None for as long as they are missing."""
+    user = (os.getenv("CVR_USER") or "").strip()
+    password = (os.getenv("CVR_PASSWORD") or "").strip()
+    return (user, password) if user and password else None
+
+
+def _post_json(url: str, body: dict, auth) -> dict:
+    """POST a query and parse the answer.
+
+    No curl fallback, unlike `_get_json`. That one exists because this machine's
+    TLS is too old for some hosts, and this endpoint is plain HTTP, so there is
+    no handshake here to fail.
+    """
+    try:
+        response = httpx.post(url, json=body, auth=auth,
+                              headers={"User-Agent": USER_AGENT,
+                                       "Content-Type": "application/json"},
+                              timeout=HTTP_TIMEOUT)
+    except httpx.HTTPError as error:
+        raise RegisterFailed(type(error).__name__ + ": " + str(error)[:160])
+    if response.status_code in (401, 403):
+        raise RegisterFailed("CVR refused the credentials (HTTP "
+                             + str(response.status_code) + ")")
+    try:
+        response.raise_for_status()
+        return response.json()
+    except Exception as error:
+        raise RegisterFailed("CVR: " + type(error).__name__ + ": "
+                             + str(error)[:140])
+
+
+def _cvr_body(codes: List[str], city: Optional[str], size: int) -> dict:
+    """One query: every wanted activity code at once, in one town or the country.
+
+    One request rather than Norway's code-by-code loop, because the guide
+    reserves the right to cut off an account that leans on the service, and each
+    hit carries its own activity code so the segments can be told apart
+    afterwards anyway.
+    """
+    must = [{"terms": {_CVR_BRANCHE: codes}}]
+    if city:
+        # Unverified: which field a plain town name can match. The guide's
+        # examples reach into the metadata block with flat dotted paths, so the
+        # paths are sound, but a Danish post district is written "Koebenhavn K"
+        # where the municipality is "Koebenhavn", and whether these are analysed
+        # text or keywords decides which of the two a bare town name hits. Both
+        # are offered and one is enough, which is right either way round.
+        must.append({"bool": {"minimum_should_match": 1, "should": [
+            {"match_phrase": {_CVR_POSTDISTRIKT: city}},
+            {"match_phrase": {_CVR_KOMMUNE: city}},
+        ]}})
+    return {
+        "size": size,
+        # The metadata object whole rather than its leaves. It is the register's
+        # own denormalised "latest value" block, so asking for all of it means a
+        # mistaken leaf path costs nothing, while a full company document with
+        # every historical name and address would be megabytes per page.
+        "_source": [_CVR_ROOT + ".cvrNummer",
+                    _CVR_ROOT + ".virksomhedMetadata",
+                    _CVR_ROOT + ".reklamebeskyttet",
+                    _CVR_ROOT + ".telefonNummer",
+                    _CVR_ROOT + ".elektroniskPost",
+                    _CVR_ROOT + ".hjemmeside"],
+        "query": {"bool": {"must": must}},
+        # Biggest crew first, for Norway's reason: seats are per person in the
+        # field, so the largest employer in a town is the largest deal in it.
+        # unmapped_type keeps a sort on a field this index may not carry from
+        # taking the whole query down with it.
+        "sort": [{_CVR_STAFF: {"order": "desc", "missing": "_last",
+                               "unmapped_type": "long"}}],
+    }
+
+
+def _cvr_hits(auth, codes: List[str], city: Optional[str], size: int) -> list:
+    payload = _post_json(CVR_URL, _cvr_body(codes, city, size), auth)
+    return (payload.get("hits") or {}).get("hits") or []
+
+
+def _cvr_first(values) -> Optional[str]:
+    """The first contact detail that is current and not marked secret.
+
+    `hemmelig` is the company saying it does not want this one published, and a
+    `periode.gyldigTil` is a detail it has since replaced.
+    """
+    for item in values or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("hemmelig"):
+            continue
+        if (item.get("periode") or {}).get("gyldigTil"):
+            continue
+        value = str(item.get("kontaktoplysning") or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _impersonal(address: str) -> bool:
+    """Whether a mailbox belongs to the organisation rather than to a person.
+
+    Borrowed, not copied. The rule lives in `tools/extract_kbo.py` because that
+    is where it runs over four gigabytes of Belgian register, and there is no
+    second copy of it here on purpose: one rule about whose mailbox this is, in
+    one place, so the two countries can never drift apart on it. If that module
+    is not importable, no Danish mailbox is carried across at all, which errs
+    the safe way.
+    """
+    try:
+        from tools.extract_kbo import impersonal
+    except Exception:
+        return False
+    return bool(impersonal(address))
+
+
+def _cvr_contacts(company: dict, meta: dict):
+    """Phone, mailbox and homepage, as the company registered them itself.
+
+    The mailbox has one more gate than the other two: it has to be the
+    organisation's own and not a named colleague's. A legal entity is free to
+    publish a person's address, and when it does the company stays on the list
+    while that address does not.
+    """
+    phone = _cvr_first(company.get("telefonNummer"))
+    email = _cvr_first(company.get("elektroniskPost"))
+    website = _cvr_first(company.get("hjemmeside"))
+
+    # Unverified: the three arrays above are documented by clients of this
+    # endpoint rather than by the guide, which only ever shows the metadata
+    # block. nyesteKontaktoplysninger is in that block but is a flat list with
+    # nothing saying which string is which, so it is read by shape and only for
+    # whatever the arrays did not already give.
+    if not (phone and email and website):
+        for value in meta.get("nyesteKontaktoplysninger") or []:
+            value = str(value or "").strip()
+            if not value:
+                continue
+            if "@" in value:
+                email = email or value
+            elif sum(character.isdigit() for character in value) >= 6:
+                phone = phone or value
+            elif "." in value:
+                website = website or value
+
+    if email and not _impersonal(email):
+        email = None
+    return phone or None, email or None, website or None
+
+
+def _cvr_staff(meta: dict) -> Optional[int]:
+    """How many people, the most complete count first. The quarterly and monthly
+    figures are there for a company too young to have an annual one yet."""
+    for key in ("nyesteAarsbeskaeftigelse", "nyesteKvartalsbeskaeftigelse",
+                "nyesteMaanedsbeskaeftigelse"):
+        count = (meta.get(key) or {}).get("antalAnsatte")
+        if isinstance(count, bool):
+            continue
+        if isinstance(count, (int, float)):
+            return int(count)
+    return None
+
+
+def _cvr_lead(number: str, company: dict, meta: dict) -> Optional[dict]:
+    address = meta.get("nyesteBeliggenhedsadresse") or {}
+    street = " ".join(
+        str(part) for part in [address.get("vejnavn"),
+                               address.get("husnummerFra"),
+                               address.get("bogstavFra")]
+        if part not in (None, "")).strip() or None
+    name = str((meta.get("nyesteNavn") or {}).get("navn") or "").strip()
+    if not name:
+        return None
+    phone, email, website = _cvr_contacts(company, meta)
+    return {
+        "source_id": "cvr/" + number,
+        "name": name,
+        "segment": _segment_of(
+            "DK", (meta.get("nyesteHovedbranche") or {}).get("branchekode") or ""),
+        "country": "DK",
+        # Left in the register's own capitalisation. CVR writes a post district
+        # as "Koebenhavn K", and title-casing that would be a guess dressed up
+        # as tidiness.
+        "city": (address.get("postdistrikt") or "").strip() or None,
+        "street": street,
+        "website": website,
+        "phone": phone,
+        "email": email,
+        "field_staff": _cvr_staff(meta),
+    }
+
+
+def _denmark(segments: List[str], cities: List[str], cap: int) -> List[dict]:
+    auth = _cvr_auth()
+    if auth is None:
+        raise RegisterFailed("CVR_USER and CVR_PASSWORD are not set")
+
+    codes = _codes_for("DK", segments)
+    if not codes:
+        return []
+    places = [c.strip() for c in cities if c and c.strip()] or [None]
+
+    leads: List[dict] = []
+    seen = set()
+    hits_seen = 0
+    unflagged = 0
+    for place in places:
+        if len(leads) >= cap:
+            break
+        hits = _cvr_hits(auth, codes, place, min(cap, 100))
+        hits_seen += len(hits)
+        for hit in hits:
+            if len(leads) >= cap:
+                break
+            source = hit.get("_source") or {}
+            # Unverified: whether the document is wrapped under its type name.
+            # The guide's query paths all start "Vrvirksomhed.", so it almost
+            # certainly is, and the fallback costs one line.
+            company = source.get(_CVR_ROOT) or source
+            number = str(company.get("cvrNummer") or "").strip()
+            if not number or number in seen:
+                continue
+            meta = company.get("virksomhedMetadata") or {}
+            status = str(meta.get("sammensatStatus") or "").upper()
+            if any(word in status for word in CVR_DEAD):
+                continue
+            # CVR-loven section 19, subsection 2: a company that has registered
+            # reklamebeskyttelse must not have its register data used for direct
+            # marketing by a private legal entity, and writing to people is what
+            # this pipeline is for. So the flag decides, and a row whose flag
+            # cannot be read is left out rather than guessed at. The declaration
+            # signed to get these credentials is a promise about this exact
+            # thing, which makes it a hard filter and not a preference.
+            protected = company.get("reklamebeskyttet")
+            if protected is None:
+                unflagged += 1
+                continue
+            if protected:
+                continue
+            lead = _cvr_lead(number, company, meta)
+            if lead is None:
+                continue
+            seen.add(number)
+            leads.append(lead)
+
+    if leads:
+        return leads
+
+    # Nothing came back. Before reporting that, establish which kind of nothing
+    # it is, because a mistaken field path matches no documents and is
+    # indistinguishable from an empty country. Denmark has thousands of cleaning
+    # companies, so a code filter that finds none of them is a broken query, and
+    # raising hands the search to the map instead of telling a rep that Denmark
+    # has no cleaners in it.
+    if not hits_seen:
+        if any(places) and _cvr_hits(auth, codes, None, 1):
+            return []       # the codes do work; these towns simply have none
+        raise RegisterFailed("CVR matched no company at all for "
+                             + ", ".join(codes) + ", so the query is wrong")
+    if unflagged and unflagged == hits_seen:
+        raise RegisterFailed("CVR answered without reklamebeskyttet, which this "
+                             "search may not go ahead without")
+    return []
+
+
 # ------------------------------------------------------------------- dispatch ---
 
 ADAPTERS = {
     "NO": _norway,
     "FI": _finland,
+    "DK": _denmark,
     "BE": _belgium,
 }
 
+# An adapter that needs credentials only counts as present once it has them.
+# Both `has_register` and `register_for` go through this, so what Settings tells
+# a user about where a country gets searched cannot drift from where the search
+# actually goes, and Denmark keeps running on the map until the day CVR_USER and
+# CVR_PASSWORD appear in the environment.
+GATES = {
+    "DK": lambda: _cvr_auth() is not None,
+}
+
+
+def _usable(code: str) -> bool:
+    code = (code or "").upper()
+    if code not in ADAPTERS:
+        return False
+    gate = GATES.get(code)
+    return gate() if gate else True
+
 
 def has_register(code: str) -> bool:
-    return (code or "").upper() in ADAPTERS
+    return _usable(code)
 
 
 def search(code: str, segments: List[str], cities: List[str],
@@ -378,7 +739,7 @@ def search(code: str, segments: List[str], cities: List[str],
     """This country's register, or RegisterFailed. Never an empty-looking lie:
     a register that cannot be reached raises, so the caller can fall back to the
     map instead of reporting that the country has no companies in it."""
-    adapter = ADAPTERS.get((code or "").upper())
-    if adapter is None:
+    if not _usable(code):
         raise RegisterFailed("no register adapter for " + str(code))
+    adapter = ADAPTERS[(code or "").upper()]
     return adapter(segments, cities, max(1, cap))

@@ -53,10 +53,27 @@ against the map's 1, and 256 cleaning companies against 13.
 | BE | KBO | published as a 4 GB download, filtered and loaded ahead of time |
 | NO | Enhetsregisteret | live JSON API, no key, and it carries employee counts |
 | FI | PRH / YTJ | live JSON API, no key |
-| DK | CVR | free, but granted by email after a signed declaration. Not applied for |
+| DK | CVR | adapter built, switched off: free, but granted by email after a signed declaration. See `docs/cvr-ansoegning.md` |
 | SE | — | Bolagsverket does not register industry codes at all |
 | NL | — | the KVK API cannot search by activity, only name, street and place |
 | US / CA | — | no national register with activity codes |
+
+Denmark is the one country here with a register the app cannot reach yet. Erhvervsstyrelsen
+grants access to the CVR Elasticsearch endpoint by email, free, after a signed declaration about
+advertisement-protected companies, and the published turnaround is around three weeks. The
+adapter is written and tested against the published field names but never against a real
+response, because the endpoint answers 401 without credentials. It stays switched off until
+`CVR_USER` and `CVR_PASSWORD` are both set: `has_register("DK")` reads those two variables, so
+until then Denmark searches the map and the Settings tab says so rather than promising a register
+it cannot use. The application, ready to sign and send, is in `docs/cvr-ansoegning.md`.
+
+Two things in that adapter are worth knowing before the credentials land. Denmark's DB07 codes
+subdivide further than Norway's or Finland's, so window cleaning is `812210` on its own rather
+than the whole of 81.22, and property management is `683210` and not the owners' associations
+next to it in `683220`. And CVR-loven § 19 means an advertisement-protected company may not be
+used for direct marketing, so the adapter drops those rows, drops rows whose flag it cannot read,
+and refuses to run at all if CVR ever answers without the flag. A legal limit is a filter in the
+code, not a line in a policy.
 
 **The open map, for the rest.** Nominatim turns each city into a bounding box and Overpass
 returns the businesses inside it carrying that industry's tags. A country whose register
