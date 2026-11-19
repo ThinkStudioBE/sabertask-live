@@ -508,22 +508,12 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
 }
 
 /* -------------------------------------------------------------- cold mail */
-/* The queue on the left, the mail itself on the right. The list scrolls on its
-   own so a long queue never pushes the mail off the screen. */
-.mail-grid { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px; align-items: start; }
-.mail-list { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-             overflow: hidden; max-height: calc(100vh - 300px); overflow-y: auto; }
-.mail-row { display: flex; gap: 0; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
-.mail-row:last-child { border-bottom: 0; }
-.mail-row:hover { background: var(--bg); }
-.mail-row.on { background: var(--brand-50); }
-.mail-row .seg-stripe { width: 3px; flex: 0 0 3px; }
-.mail-row-body { padding: 11px 13px; min-width: 0; flex: 1; }
-.mail-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
-.mail-row-top .co-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
+/* The mail is a tab on the deal, so the editor lives inside the drawer: no
+   border or card of its own there, and a textarea that fits a 540px panel. */
 .mail-editor { background: var(--card); border: 1px solid var(--line);
                border-radius: var(--radius); padding: 18px; }
+.mail-editor.in-drawer { background: none; border: 0; border-radius: 0; padding: 0; }
+.mail-editor.in-drawer .mail-body { min-height: 230px; }
 .mail-head { display: flex; justify-content: space-between; align-items: flex-start;
              gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); margin-bottom: 15px; }
 .mail-to { font-weight: 700; font-size: 15px; }
@@ -542,12 +532,10 @@ table.list td.num, table.list th.num { text-align: right; white-space: nowrap; }
              border-top: 1px solid var(--line-soft); padding-top: 12px; }
 .mail-skipped { background: var(--bg); border-radius: 8px; padding: 10px 13px;
                 font-size: 12.5px; color: var(--muted); margin-bottom: 15px; }
+/* A mail written and waiting, marked where the deal is: on the card and in the
+   list, so nobody has to open every deal to find the ones ready to go out. */
+.mail-dot { color: var(--brand); font-size: 12px; vertical-align: 1px; }
 .hint { font-size: 12px; color: var(--dim); align-self: center; }
-
-@media (max-width: 1000px) {
-  .mail-grid { grid-template-columns: 1fr; }
-  .mail-list { max-height: 300px; }
-}
 
 /* ------------------------------------------------------------- find leads */
 .lead-brief { background: var(--card); border: 1px solid var(--line);

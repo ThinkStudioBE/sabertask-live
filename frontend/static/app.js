@@ -19,8 +19,6 @@ var state = {
   scope: 'mine',       // Today: mine | team
   pipelineView: 'board',
   clientStatus: 'active',
-  mailStatus: '',
-  mailOpen: null,     // Cold mail: which prospect's draft is on screen
   leadStatus: 'new',
   leadBrief: '',
   leadSearching: false,
@@ -147,7 +145,6 @@ var NAV = [
   { key: 'pipeline', label: 'Pipeline', icon: '<rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="7" rx="1"/>' },
   { key: 'companies', label: 'Firms', icon: '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5"/>' },
   { key: 'leads', label: 'Leads', icon: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>' },
-  { key: 'mail', label: 'Cold mail', icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>' },
   { key: 'clients', label: 'Clients', icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
   { key: 'reports', label: 'Reports', icon: '<path d="M3 3v18h18M7 15l4-5 3 3 5-7"/>' },
   { key: 'settings', label: 'Settings', icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.35.37.65.67.86.3.2.65.32 1 .33H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' }
@@ -334,6 +331,10 @@ function viewPipeline() {
     + '<span class="divider"></span>'
     + '<button class="btn sm' + (state.pipelineView === 'board' ? ' primary' : '') + '" data-view="board">Board</button>'
     + '<button class="btn sm' + (state.pipelineView === 'list' ? ' primary' : '') + '" data-view="list">List</button>'
+    + '<span class="divider"></span>'
+    + '<button class="btn sm" data-act="mail-draft-all" title="Write a first mail for every deal '
+    + 'that has none yet. Each one is still read and sent by hand, on the deal itself.">'
+    + 'Draft every open mail</button>'
     + '</div>';
 
   return html + (state.pipelineView === 'board' ? boardHtml(data) : dealListHtml(data));
@@ -361,7 +362,9 @@ function boardHtml(data) {
       html += '<div class="deal-card" draggable="true" data-deal="' + deal.id + '">'
         + '<div class="seg-bar" style="background:' + deal.segment_color + '"></div>'
         + '<div class="body">'
-        + '<div class="title">' + esc(deal.company) + '</div>'
+        + '<div class="title">' + esc(deal.company)
+        + (deal.draft_waiting ? ' <span class="mail-dot" title="A mail is written and waiting">'
+          + '\u2709</span>' : '') + '</div>'
         + '<div class="row">' + segTag(deal)
         + '<span class="meta">' + esc(deal.flag) + ' ' + esc(deal.city || '') + '</span></div>'
         + '<div class="row"><span class="mrr">' + money(deal.mrr) + '</span>'
@@ -386,7 +389,9 @@ function dealListHtml(data) {
     html += '<tr data-deal="' + deal.id + '">'
       + '<td><div class="seg-cell"><div class="seg-stripe" style="background:' + deal.segment_color
       + '"></div>' + segTag(deal) + '</div></td>'
-      + '<td><div class="co-name">' + esc(deal.company) + '</div>'
+      + '<td><div class="co-name">' + esc(deal.company)
+      + (deal.draft_waiting ? ' <span class="mail-dot" title="A mail is written and waiting">'
+        + '\u2709</span>' : '') + '</div>'
       + '<div class="co-sub">' + esc(deal.flag) + ' ' + esc(deal.city || '') + ' &middot; '
       + esc(deal.channel_label) + '</div></td>'
       + '<td>' + stageTag(deal) + '<div class="co-sub">' + deal.days_in_stage + 'd in stage</div></td>'
@@ -661,67 +666,21 @@ function searchHistory() {
 
 /* -------------------------------------------------------------- COLD MAIL */
 
-/* The first mail is where most of these deals are won or lost, so it gets a
-   screen rather than a field on a form: the list on the left is the queue, the
-   panel on the right is the mail itself, editable before it goes out. */
-function viewMail() {
-  var data = state.data.mail;
-  if (!data) return '<div class="view"><div class="empty">Loading</div></div>';
-  var counts = data.counts;
+/* The mail no longer has a screen of its own: it is a tab on the deal, so the
+   rep writes it on the card he is already working. mailState paints the state
+   on that tab, mailEditor is the mail itself. Both are fed by
+   GET /api/mail/{deal_id}, fetched together with the deal. */
+/* The Mail tab acts on whichever deal the drawer is showing. After a change the
+   deal is reopened on the same tab, and the board behind it is reloaded so the
+   waiting-mail marker on the card follows along. */
+function mailDeal() {
+  return state.drawer && state.drawer.kind === 'deal' ? state.drawer.data.deal.id : null;
+}
 
-  var html = '<div class="kpis">'
-    + '<div class="kpi accent"><div class="k">To write</div><div class="v">' + counts.none
-    + '</div><div class="sub">no draft yet</div></div>'
-    + '<div class="kpi"><div class="k">Drafted</div><div class="v">' + counts.draft
-    + '</div><div class="sub">waiting to go out</div></div>'
-    + '<div class="kpi"><div class="k">Sent</div><div class="v">' + counts.sent + '</div></div>'
-    + '<div class="kpi"><div class="k">Skipped</div><div class="v">' + counts.skipped
-    + '</div><div class="sub">not a fit</div></div>'
-    + '</div>';
-
-  html += '<div class="filterbar">' + segFilter()
-    + '<select data-filter="mailStatus">'
-    + '<option value="">Every state</option>'
-    + ['none', 'draft', 'sent', 'skipped'].map(function (key) {
-        var label = { none: 'To write', draft: 'Drafted', sent: 'Sent', skipped: 'Skipped' }[key];
-        return '<option value="' + key + '"' + (state.mailStatus === key ? ' selected' : '')
-          + '>' + label + '</option>';
-      }).join('')
-    + '</select>'
-    + '<button class="btn sm" data-act="mail-draft-all">Draft every open one</button>'
-    + '<span class="hint">' + esc(data.stages.join(', ')) + ' only</span>'
-    + '</div>';
-
-  if (!data.rows.length) {
-    return html + '<div class="view"><div class="empty">Nothing waiting on a first mail.</div></div>';
-  }
-
-  var open = null;
-  data.rows.forEach(function (row) {
-    if (row.deal_id === state.mailOpen) open = row;
-  });
-  if (!open) open = data.rows[0];
-  state.mailOpen = open.deal_id;
-
-  html += '<div class="view"><div class="mail-grid">';
-
-  html += '<div class="mail-list">';
-  data.rows.forEach(function (row) {
-    html += '<div class="mail-row' + (row.deal_id === open.deal_id ? ' on' : '')
-      + '" data-mail="' + row.deal_id + '">'
-      + '<div class="seg-stripe" style="background:' + row.segment_color + '"></div>'
-      + '<div class="mail-row-body">'
-      + '<div class="mail-row-top"><span class="co-name">' + esc(row.company) + '</span>'
-      + mailState(row) + '</div>'
-      + '<div class="co-sub">' + segTag(row) + ' &middot; ' + esc(row.flag) + ' '
-      + esc(row.city || '') + ' &middot; ' + money(row.mrr) + ' / mo</div>'
-      + '<div class="co-sub">' + (row.to_email ? esc(row.to_email) : 'No mailbox on file') + '</div>'
-      + '</div></div>';
-  });
-  html += '</div>';
-
-  html += '<div class="mail-editor">' + mailEditor(open) + '</div>';
-  return html + '</div></div>';
+function afterMail() {
+  var id = mailDeal();
+  if (id) openDeal(id, true);
+  load();
 }
 
 function mailState(row) {
@@ -738,8 +697,9 @@ function mailEditor(row) {
     + '<div><div class="mail-to">To ' + (row.to_name ? esc(row.to_name) : 'nobody yet')
     + '</div><div class="co-sub">' + (row.to_email ? esc(row.to_email) : 'This prospect has no contact mailbox, so it cannot go out.')
     + '</div></div>'
+    + '<div style="text-align:right">' + mailState(row)
     + '<div class="mail-why">' + esc(row.field_staff || 0) + ' field staff &middot; runs '
-    + esc(row.current_tool || 'nothing we know of') + '</div></div>';
+    + esc(row.current_tool || 'nothing we know of') + '</div></div></div>';
 
   if (row.status === 'skipped') {
     html += '<div class="mail-skipped">Skipped: ' + esc(row.skipped_reason || '')
@@ -950,10 +910,18 @@ function viewReports() {
 
 /* ----------------------------------------------------------------- DRAWER */
 
-function openDeal(id) {
-  api('/api/deals/' + id).then(function (data) {
+function openDeal(id, keepTab) {
+  // The cold mail travels with the deal, so the drawer never has to go and
+  // fetch it when somebody opens the Mail tab. keepTab is for the actions on
+  // that tab: they reopen the deal and must not throw you back to Overview.
+  Promise.all([
+    api('/api/deals/' + id),
+    api('/api/mail/' + id)
+  ]).then(function (both) {
+    var data = both[0];
+    data.mail = both[1];
     state.drawer = { kind: 'deal', data: data };
-    state.drawerTab = 'overview';
+    if (!keepTab) state.drawerTab = 'overview';
     paintDrawer();
   }).catch(function (error) { toast(error.message); });
 }
@@ -993,7 +961,11 @@ function paintDrawer() {
 
 function dealDrawer(payload) {
   var deal = payload.deal;
-  var tabs = [['overview', 'Overview'], ['activity', 'Activity (' + payload.notes.length + ')'],
+  var mail = payload.mail || { status: 'none' };
+  var mailLabel = { none: 'Mail \u00b7 to write', draft: 'Mail \u00b7 drafted',
+    sent: 'Mail \u00b7 sent', skipped: 'Mail \u00b7 skipped' }[mail.status] || 'Mail';
+  var tabs = [['overview', 'Overview'], ['mail', mailLabel],
+    ['activity', 'Activity (' + payload.notes.length + ')'],
     ['contacts', 'Contacts (' + payload.contacts.length + ')'], ['quotes', 'Quotes (' + payload.quotes.length + ')']];
 
   var html = '<header><div class="top">'
@@ -1079,6 +1051,10 @@ function dealDrawer(payload) {
         + '<div class="co-sub">' + step.at.slice(0, 10) + '</div></div>';
     });
     html += '</div>';
+  }
+
+  if (state.drawerTab === 'mail') {
+    html += '<div class="mail-editor in-drawer">' + mailEditor(mail) + '</div>';
   }
 
   if (state.drawerTab === 'activity') {
@@ -1348,11 +1324,6 @@ function load() {
       state.data.leadSearches = data;
     }));
   }
-  if (state.nav === 'mail') {
-    jobs.push(api('/api/mail' + qs('scope=team&status=' + state.mailStatus)).then(function (data) {
-      state.data.mail = data;
-    }));
-  }
   if (state.nav === 'clients') {
     jobs.push(api('/api/clients' + qs('status=' + state.clientStatus)).then(function (data) {
       state.data.clients = data;
@@ -1376,7 +1347,7 @@ function load() {
 function paint() {
   var views = {
     today: viewToday, pipeline: viewPipeline, companies: viewCompanies,
-    leads: viewLeads, mail: viewMail, clients: viewClients, reports: viewReports,
+    leads: viewLeads, clients: viewClients, reports: viewReports,
     settings: viewSettings
   };
   document.getElementById('view-name').textContent =
@@ -1446,7 +1417,7 @@ function moveStage(dealId, stage) {
 
 document.addEventListener('click', function (event) {
   var target = event.target.closest('[data-nav],[data-act],[data-seg],[data-view],[data-tab],'
-    + '[data-deal],[data-company],[data-client],[data-complete],[data-open-deal],[data-mail],'
+    + '[data-deal],[data-company],[data-client],[data-complete],[data-open-deal],'
     + '[data-search]');
   if (!target) return;
 
@@ -1470,11 +1441,6 @@ document.addEventListener('click', function (event) {
     return;
   }
 
-  if (target.dataset.mail && !target.dataset.act) {
-    state.mailOpen = parseInt(target.dataset.mail, 10);
-    paint();
-    return;
-  }
 
   if (target.dataset.view) { state.pipelineView = target.dataset.view; paint(); return; }
   if (target.dataset.tab) { state.drawerTab = target.dataset.tab; paintDrawer(); return; }
@@ -1630,19 +1596,19 @@ document.addEventListener('click', function (event) {
   }
 
   if (act === 'mail-draft') {
-    api('/api/mail/' + state.mailOpen + '/draft', { method: 'POST', body: {} })
-      .then(function () { toast('Drafted'); load(); })
+    api('/api/mail/' + mailDeal() + '/draft', { method: 'POST', body: {} })
+      .then(function () { toast('Drafted'); afterMail(); })
       .catch(function (error) { toast(error.message); });
   }
 
   if (act === 'mail-save') {
-    api('/api/mail/' + state.mailOpen, {
+    api('/api/mail/' + mailDeal(), {
       method: 'PATCH',
       body: {
         subject: document.getElementById('mail-subject').value,
         body: document.getElementById('mail-body').value
       }
-    }).then(function () { toast('Saved'); load(); })
+    }).then(function () { toast('Saved'); afterMail(); })
       .catch(function (error) { toast(error.message); });
   }
 
@@ -1661,16 +1627,16 @@ document.addEventListener('click', function (event) {
   }
 
   if (act === 'mail-sent') {
-    api('/api/mail/' + state.mailOpen + '/sent', { method: 'POST', body: {} })
+    api('/api/mail/' + mailDeal() + '/sent', { method: 'POST', body: {} })
       .then(function (row) {
         toast('Logged as sent' + (row.stage === 'contacted' ? ', moved to contacted' : ''));
-        load();
+        afterMail();
       }).catch(function (error) { toast(error.message); });
   }
 
   if (act === 'mail-skip') {
-    api('/api/mail/' + state.mailOpen + '/skip', { method: 'POST', body: { reason: null } })
-      .then(function () { toast('Left alone'); load(); })
+    api('/api/mail/' + mailDeal() + '/skip', { method: 'POST', body: { reason: null } })
+      .then(function () { toast('Left alone'); afterMail(); })
       .catch(function (error) { toast(error.message); });
   }
 

@@ -158,6 +158,22 @@ def _deal_and_company(session: Session, deal_id: int):
     return deal, company
 
 
+@router.get("/mail/{deal_id}")
+def one_mail(deal_id: int, session: Session = Depends(get_session),
+             user: User = Depends(current_user)):
+    """The cold mail of ONE deal, for the Mail tab inside the deal drawer.
+
+    The queue screen is gone: a rep works a prospect, not a mail list, so the
+    mail is fetched with the deal it belongs to. Returns the same row the list
+    used to return, with status "none" when nothing has been written yet.
+    """
+    deal, company = _deal_and_company(session, deal_id)
+    draft = session.exec(
+        select(MailDraft).where(MailDraft.deal_id == deal_id)).first()
+    return _row(deal, company, session.get(User, deal.owner_id) if deal.owner_id else None,
+                _contact_for(session, company.id, deal), draft)
+
+
 @router.post("/mail/{deal_id}/draft")
 def draft_one(deal_id: int, session: Session = Depends(get_session),
               user: User = Depends(current_user)):

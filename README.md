@@ -109,6 +109,15 @@ company publishes. No personal names are invented anywhere, in the seed or in th
 and nothing is sent automatically: cold mail is drafted, read by a person and sent from
 their own mailbox.
 
+### The cold mail lives on the deal
+
+There is no mail screen. The mail is a tab on the deal itself, next to Overview, because a
+rep works a prospect and not a mail list. `GET /api/mail/{deal_id}` is fetched together with
+the deal, the tab says which state it is in (to write, drafted, sent, skipped), and a deal
+whose mail is written and still waiting carries an envelope on its board card and in the
+list, so the queue is visible where the work is. "Draft every open mail" sits on the
+pipeline toolbar for the bulk pass.
+
 ### Mirrors, and why there is a curl fallback
 
 Overpass is run by volunteers. Mirrors are tried in order and the first that answers wins.

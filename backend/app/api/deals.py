@@ -10,7 +10,8 @@ from sqlmodel import Session, select
 from .. import config
 from ..auth import current_user
 from ..db import get_session
-from ..models import Client, Company, Contact, Deal, Note, StageEvent, Task, User
+from ..models import (Client, Company, Contact, Deal, MailDraft, Note, StageEvent,
+                      Task, User)
 from ..routing import owner_for_segment
 from ..serializers import (
     contact_dict, deal_dict, deal_mrr, note_dict, plan_for, total_seats, user_dict,
@@ -125,6 +126,11 @@ def list_deals(
 ):
     companies, users, contacts = _lookup(session)
     deals = session.exec(select(Deal)).all()
+    # Which deals have a cold mail written and still waiting to go out. The mail
+    # lives on the deal now, so the board has to be able to say so without
+    # anybody opening every card.
+    waiting = {d.deal_id for d in session.exec(
+        select(MailDraft).where(MailDraft.status == "draft")).all()}
 
     stages = {s for s in stage.split(",") if s}
     segments = {s for s in segment.split(",") if s}
@@ -156,6 +162,7 @@ def list_deals(
         rows.append(deal_dict(
             deal, company, users.get(deal.owner_id),
             contacts.get(deal.primary_contact_id),
+            extra={"draft_waiting": deal.id in waiting},
         ))
 
     rows.sort(key=lambda r: (-r["mrr"], r["company"] or ""))
