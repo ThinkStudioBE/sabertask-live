@@ -219,7 +219,10 @@ SEGMENTS = [
         "color": "#4f7aa0",
         "profile": "Contract cleaners working recurring service agreements: "
                    "stairway washes, office cleaning, deep cleans, lobbies and "
-                   "hallways, on weekly, biweekly and monthly rounds.",
+                   "hallways, on weekly, biweekly and monthly rounds. In North "
+                   "America the same company trades as janitorial, commercial "
+                   "cleaning, housekeeping or facility services, and the ones "
+                   "Sabertask names as ideal clients run 12 to 45 people.",
         "pain": "Schedules rebuilt in Excel every week, photos in WhatsApp, "
                 "timesheets on paper, and clients ringing to ask whether anyone "
                 "actually showed up.",
@@ -251,7 +254,10 @@ SEGMENTS = [
         "profile": "Facility and property managers running portfolios of "
                    "dozens to hundreds of buildings, who buy and coordinate "
                    "cleaning, window and garden work per building and carry "
-                   "the service agreements for all of it.",
+                   "the service agreements for all of it. This is the buyer, "
+                   "not the contractor: a firm trading as Facility Services "
+                   "with its own cleaners on the payroll is a cleaning "
+                   "company and belongs on the cleaning desk.",
         "pain": "Service agreements scattered across spreadsheets, maintenance "
                 "lost in email threads, no proof of what was done at which "
                 "building, and tenants and owners chasing for updates.",
@@ -282,6 +288,42 @@ SEGMENT_LABEL = {s["key"]: s["label"] for s in SEGMENTS}
 SEGMENT_SHORT = {s["key"]: s["short"] for s in SEGMENTS}
 SEGMENT_COLOR = {s["key"]: s["color"] for s in SEGMENTS}
 SEGMENT_KEYS = [s["key"] for s in SEGMENTS]
+
+# ----------------------------------------------------------- ideal clients ---
+# Sabertask handed over twelve of its ideal clients on 2026-11-24: Pro
+# Housekeepers, GBC Facility Services, Hero Facility Services, Cristal Clear
+# Cleaning, Office Pride Pensacola, Total Facility Solutions, ProFi Facility
+# Maintenance, General Facility Care, WeClean Commercial Cleaning, Clean Slate
+# Janitorial, American Cleaning Services and Service Keepers Maintenance.
+#
+# What the twelve have in common is the profile this tool is supposed to be
+# hunting, so it is written down here rather than left in a mailbox:
+#
+#   - All twelve are contract cleaners or building-services contractors.
+#     Eleven are filed under SIC 7349, building cleaning and maintenance; the
+#     twelfth under 1542, nonresidential construction, and it cleans too.
+#   - All twelve have between 12 and 45 people. Not one is a giant and not one
+#     is a two-man outfit, which is why `leadfinder._size_points` scores that
+#     band highest instead of rewarding headcount without end.
+#   - Seven of the twelve call themselves "facility" something while doing
+#     janitorial work. In North America that is a cleaner's word, not a
+#     property manager's, so `leadfinder.SECTOR_WORDS` reads those phrases as
+#     cleaning and the cleaning desk gets them.
+#   - All twelve are in Florida: Miami, Tampa, Orlando, Jacksonville, Fort
+#     Lauderdale, Melbourne, Pensacola, Coconut Creek. Hence the US seed
+#     cities in `leadfinder.SEED_CITIES`.
+#
+# The band is the observed one and nothing is rounded up to make it look
+# tidier. Anybody widening it should be looking at a new list, not at a hunch.
+IDEAL_CLIENT = {
+    "staff_min": 12,
+    "staff_max": 45,
+    "segments": ["cleaning", "facility"],
+    "source": "twelve ideal clients named by Sabertask, Florida, 2026-11-24",
+    "note": "12 to 45 people in the field, contract cleaning or building "
+            "services, whatever the name on the van says. Seven of the twelve "
+            "trade as \"facility\" something and still do janitorial work.",
+}
 
 def flag_for(code):
     """The flag emoji for any ISO 3166-1 alpha-2 code, computed rather than

@@ -184,6 +184,15 @@ SECTOR_WORDS = {
         "gardening", "garden maintenance", "gardener", "horticult",
     ],
     "cleaning": [
+        # North America, read off the twelve ideal clients (config.IDEAL_CLIENT).
+        # Seven of them trade as "facility" something while doing janitorial
+        # work, and cleaning is matched before facility, so these phrases land
+        # on the cleaning desk while the bare word "facilit" below still means
+        # a property manager.
+        "janitor", "custodial", "custodian", "housekeep", "maid service",
+        "porter service", "building care", "facility service",
+        "facilities service", "facility solution", "facility care",
+        "facility maintenance",
         "cleaning", "clean", "janitorial", "schoonmaak", "poetsdienst",
         "poetshulp", "reiniging", "reinigingsdienst", "rengøring",
         "rengoring", "rengjøring", "rengjoring", "städ", "staed",
@@ -211,7 +220,11 @@ SEED_CITIES = {
     "SE": ["Stockholm", "Goteborg", "Malmo"],
     "NO": ["Oslo", "Bergen", "Trondheim"],
     "FI": ["Helsinki", "Tampere", "Turku"],
-    "US": ["Boston", "Chicago", "Denver"],
+    # Florida, because that is where every one of the twelve ideal clients
+    # sits. Jacksonville, Fort Lauderdale, Melbourne, Pensacola and Coconut
+    # Creek are on that list too and are searched the moment a brief names
+    # one: three cities go into a run, so these are the three biggest.
+    "US": ["Miami", "Tampa", "Orlando"],
     "CA": ["Toronto", "Montreal", "Calgary"],
 }
 
@@ -597,28 +610,33 @@ def _size_points(field_staff: Optional[int]) -> int:
 
     This is the part of the score that is about the company rather than about
     how complete its record happens to be. Seats are per person in the field,
-    so a bigger crew is a bigger deal, and a size nobody knows yet is treated as
-    small rather than as a blank.
+    so this used to rise with the headcount all the way up: ISS, with ten
+    thousand people in Oslo alone, scored highest of anything the Norwegian
+    register could hand back.
 
-    The bands run past a thousand because the Norwegian register publishes
-    employee counts and the real ones go that high: ISS has ten thousand people
-    in Oslo alone. Stopping at two hundred put that company in the same bucket
-    as a firm fifty times smaller, which is the one comparison this number
-    exists to make.
+    The twelve ideal clients Sabertask handed over say otherwise, and they are
+    the better authority (`config.IDEAL_CLIENT`). Every one of them has between
+    12 and 45 people. A ten-thousand-person group is a different sale, run by
+    procurement over a year and not by this floor, and a crew of three has
+    nothing to plan yet. So the band the client actually wins scores highest,
+    the sizes either side of it score less rather than nothing, and a size
+    nobody knows yet is still treated as small rather than as a blank.
+
+    The band here is wider than the observed 12 to 45: a map lead's headcount
+    is a guess from the register or from nowhere at all, and a margin either
+    side costs less than filing a 50-person cleaner below a 500-person one.
     """
     if not field_staff:
         return 5
-    if field_staff >= 1000:
+    if field_staff < 10:
+        return 12
+    if field_staff <= 60:
         return 30
-    if field_staff >= 500:
-        return 26
-    if field_staff >= 200:
-        return 22
-    if field_staff >= 120:
-        return 15
-    if field_staff >= 60:
-        return 10
-    return 5
+    if field_staff <= 200:
+        return 24
+    if field_staff <= 1000:
+        return 20
+    return 16
 
 
 def _score(lead: dict) -> int:

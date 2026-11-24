@@ -45,6 +45,9 @@ def meta(session: Session = Depends(get_session), user: User = Depends(current_u
         "board_stages": config.BOARD_STAGES,
         "stage_steps": config.STAGE_NEXT_STEP,
         "segments": config.SEGMENTS,
+        # Who the client itself says it wins, shown above the industry
+        # profiles on an empty Leads tab.
+        "ideal_client": config.IDEAL_CLIENT,
         "segment_desk": segment_desk(session),
         "countries": settings_store.countries(),
         "size_bands": config.SIZE_BANDS,

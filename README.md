@@ -91,6 +91,23 @@ profile and the pain Sabertask names for it, the app shows both beside the indus
 the prompt that reads a brief is built from them. Five of the six can be checked against
 the site; `municipal` cannot, and says so where it is defined.
 
+### The ideal client, and what it changed
+
+Sabertask handed over twelve of its ideal clients (Florida, 2026-11-24). All twelve are
+contract cleaners or building-services contractors, eleven of them filed under SIC 7349,
+and all twelve have between 12 and 45 people. `config.IDEAL_CLIENT` is that profile written
+down, and the Leads tab shows it above the industries.
+
+Three things in the search follow from it. Seven of the twelve trade as "facility"
+something while doing janitorial work, so `SECTOR_WORDS` reads "facility services",
+"facility solutions", "facility care" and "facility maintenance" as cleaning, along with
+janitorial, custodial, housekeeping, maid and porter service; the bare word "facilit" still
+means a property manager, which is the buyer and not the contractor. The US seed cities are
+Miami, Tampa and Orlando rather than Boston, Chicago and Denver. And `_size_points` scores
+the band the client actually wins highest, where it used to reward headcount without end:
+10 to 60 people now outscores a ten-thousand-person group, which is a procurement sale and
+not this floor's.
+
 **A search returns at most 50 leads per country**, counted over every industry in it, so the
 total grows with the number of countries picked. The cap is `config.LEAD_CAP_PER_COUNTRY`,
 deliberately not an environment variable and not a setting, so it cannot be raised from a

@@ -216,8 +216,13 @@ function segFilter() {
 // sabertask.com and lives in config.SEGMENTS, not here.
 function segProfiles() {
   if (!state.meta || !state.meta.segments) return '';
+  var ideal = state.meta.ideal_client;
   return '<div class="seg-profiles">'
     + '<div class="seg-profiles-head">Who we are looking for</div>'
+    + (ideal && ideal.note
+        ? '<div class="seg-profiles-ideal">' + esc(ideal.note)
+          + '<span>' + esc(ideal.source || '') + '</span></div>'
+        : '')
     + state.meta.segments.filter(function (seg) { return seg.profile; })
         .map(function (seg) {
           return '<div class="seg-profile">'
