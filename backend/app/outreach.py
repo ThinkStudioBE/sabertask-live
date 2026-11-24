@@ -162,9 +162,22 @@ SYSTEM = (
 )
 
 
+# Why the last draft came out of the template instead of Claude. The log says
+# it too, but a hosted service's log is not where somebody debugging a live
+# deployment can get at it quickly, and "the mails all read the same" is not a
+# diagnosis. GET /api/mail/selftest reads this.
+_last_fallback = None
+
+
+def last_fallback() -> Optional[str]:
+    return _last_fallback
+
+
 def _complain(reason: str) -> None:
     """Failures belong in the server log, not on the screen. A rep looking at a
     prospect should never be reading about our plumbing."""
+    global _last_fallback
+    _last_fallback = reason
     print("[mail] falling back to the plain drafter: " + reason)
 
 

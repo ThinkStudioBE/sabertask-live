@@ -6,6 +6,7 @@ the mail and records that it went out; a person reads it, decides, and sends it
 from their own mailbox. Nothing leaves this machine on its own.
 """
 
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .. import config, settings_store
+from .. import config, outreach, settings_store
 from ..auth import current_user
 from ..db import get_session
 from ..models import Company, Contact, Deal, MailDraft, Note, User
@@ -156,6 +157,32 @@ def _deal_and_company(session: Session, deal_id: int):
     if company is None:
         raise HTTPException(status_code=404, detail="No such company")
     return deal, company
+
+
+@router.get("/mail/selftest")
+def selftest(session: Session = Depends(get_session),
+             user: User = Depends(current_user)):
+    """Whether Claude is actually writing these mails, and if not, why.
+
+    The template drafter is the floor and it never fails, so a deployment with
+    a missing or refused key looks exactly like a working one until somebody
+    reads twelve mails and notices they are the same mail. This says so in one
+    call. It never returns the key, only whether there is one and whether it
+    looks like an Anthropic key at all.
+    """
+    key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+    counts = {}
+    for draft in session.exec(select(MailDraft)).all():
+        counts[draft.written_by] = counts.get(draft.written_by, 0) + 1
+    return {
+        "ai_enabled": config.MAIL_AI_ENABLED,
+        "key_present": bool(key),
+        "key_looks_right": key.startswith("sk-ant-"),
+        "key_length": len(key),
+        "model": config.MAIL_MODEL,
+        "last_fallback": outreach.last_fallback(),
+        "drafts_by_writer": counts,
+    }
 
 
 @router.get("/mail/{deal_id}")
