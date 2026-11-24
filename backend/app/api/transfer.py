@@ -3,10 +3,19 @@
 Import guesses the column mapping, previews it, and only then writes. Every
 imported row lands as a company, a primary contact and a lead deal, routed to
 the rep who owns that industry.
+
+A prospecting export (Apollo and the like) is the file this is pointed at most
+of the time, and it does not write the columns this app would ask for: the
+city is buried in a one-line address, the country is spelled out, the industry
+is a SIC code, and there is a LinkedIn URL sitting next to the website. All
+four are read here, because a rep uploading his own list should not have to
+rebuild it in a spreadsheet first. Nothing is guessed: a code we do not know
+and an address we cannot read leave the field empty rather than wrong.
 """
 
 import csv
 import io
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -47,23 +56,111 @@ def _guess(headers):
     lowered = {h: (h or "").strip().lower() for h in headers}
     for field in config.IMPORT_FIELDS:
         wanted = [field["label"].lower()] + [a.lower() for a in field.get("aliases", [])]
-        for header in headers:
-            if header in taken:
-                continue
+        reject = [r.lower() for r in field.get("reject", [])]
+        free = [h for h in headers
+                if h not in taken and not any(r in lowered[h] for r in reject)]
+        for header in free:
             if lowered[header] in wanted:
                 mapping[field["key"]] = header
                 taken.add(header)
                 break
         if field["key"] in mapping:
             continue
-        for header in headers:
-            if header in taken:
-                continue
+        for header in free:
             if any(alias in lowered[header] for alias in wanted):
                 mapping[field["key"]] = header
                 taken.add(header)
                 break
     return mapping
+
+
+# A postcode as the last part of an address, and one glued to the front of a
+# city the way most of Europe writes it ("2000 Antwerpen"). A postcode has to
+# carry a digit somewhere and be short: that is what keeps "M5H 2N2" out of the
+# city field and leaves "Coconut Creek" in it.
+TRAILING_POSTCODE = re.compile(r"^(?=.*[0-9])[A-Za-z0-9][A-Za-z0-9\- ]{2,9}$")
+LEADING_POSTCODE = re.compile(r"^[0-9]{4,6}\s+")
+
+
+def _country_code(value: Optional[str]) -> Optional[str]:
+    """A country as a file writes it, turned into the code the app stores.
+
+    The live set is read first, so a country added from Settings is understood
+    here without a line of code, and `config.COUNTRY_ALIASES` only carries the
+    spellings that do not match a label. This used to be `value.upper()[:2]`,
+    which turned "United States" into the country UN.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    for row in settings_store.countries():
+        if lowered in (row["label"].lower(), row["key"].lower()):
+            return row["key"]
+    code = config.COUNTRY_ALIASES.get(lowered)
+    if code:
+        return code
+    if len(text) == 2 and text.isalpha():
+        return text.upper()
+    return None
+
+
+def _from_address(address: Optional[str],
+                  state_hint: Optional[str]):
+    """(city, country) read off a one-line address, either one possibly None.
+
+    Prospecting exports put the whole address in one cell: street, city, state,
+    country, postcode, with the street and the state each missing as often as
+    not. Reading it backwards is what makes that cell usable. Drop the
+    postcode; take the country if the next part is one; drop the part after
+    that if it is the state (the file's own state column settles it, and a list
+    of states and provinces covers a file that has no such column); what is
+    left at the end is the city.
+    """
+    parts = [p.strip() for p in (address or "").split(",") if p.strip()]
+    if not parts:
+        return None, None
+
+    if TRAILING_POSTCODE.match(parts[-1]):
+        parts.pop()
+
+    country = None
+    if parts:
+        country = _country_code(parts[-1])
+        if country:
+            parts.pop()
+
+    if parts:
+        hint = (state_hint or "").strip().lower()
+        last = parts[-1].lower()
+        if (hint and last == hint) or last in config.STATE_NAMES:
+            parts.pop()
+
+    if not parts:
+        return None, country
+    city = LEADING_POSTCODE.sub("", parts[-1]).strip()
+    # A single part carrying a number is a street, and a street is not a city.
+    if not city or (len(parts) == 1 and any(ch.isdigit() for ch in city)):
+        return None, country
+    return city[:120], country
+
+
+def _segment_from_sic(value: Optional[str]) -> Optional[str]:
+    """The desk an activity code points at, or None.
+
+    One cell can hold several codes ("7349, 7381"): the first that means
+    something here wins. A code that means nothing here returns None rather
+    than a guess, because the industry decides whose desk the lead lands on.
+    """
+    for raw in re.split(r"[^0-9]+", value or ""):
+        if not raw:
+            continue
+        code = raw.zfill(4)[:4]
+        if code in config.SIC_SEGMENT:
+            return config.SIC_SEGMENT[code]
+        if code[:2] in config.SIC_PUBLIC_PREFIXES:
+            return "municipal"
+    return None
 
 
 @router.post("/import/analyze")
@@ -125,7 +222,13 @@ def commit(payload: CommitIn, session: Session = Depends(get_session),
         except ValueError:
             staff = None
 
-        segment = (value(row, "segment") or payload.default_segment or "").strip() or None
+        # The file's own industry column, then its activity code, then the
+        # industry the importer was given. The code is the better authority of
+        # the three that are in the file: it is what the company is registered
+        # as, not what a column happens to be called.
+        segment = (value(row, "segment")
+                   or _segment_from_sic(value(row, "sic"))
+                   or payload.default_segment or "").strip() or None
         if segment and segment not in config.SEGMENT_KEYS:
             # Accept the human label as well as the key.
             for key, label in config.SEGMENT_LABEL.items():
@@ -135,15 +238,40 @@ def commit(payload: CommitIn, session: Session = Depends(get_session),
             else:
                 segment = payload.default_segment
 
+        city = value(row, "city")
+        country = _country_code(value(row, "country"))
+        if not city or not country:
+            from_city, from_country = _from_address(value(row, "address"),
+                                                    value(row, "state"))
+            city = city or from_city
+            country = country or from_country
+        country = country or _country_code(payload.default_country)
+
+        notes = value(row, "notes")
+        if not notes:
+            # What the file carries that has no column of its own. Written down
+            # rather than dropped, and said to come from the file so nobody
+            # reads it as something a rep found out.
+            extra = []
+            if value(row, "sic"):
+                extra.append("SIC " + value(row, "sic"))
+            if value(row, "revenue"):
+                extra.append("annual revenue " + value(row, "revenue"))
+            state = value(row, "state")
+            if state and state.lower() != (city or "").lower():
+                extra.append(state)
+            if extra:
+                notes = "From the import file: " + ", ".join(extra) + "."
+
         routed = owner_for_segment(session, segment)
         company = Company(
             name=name,
             website=value(row, "website"),
             segment=segment,
-            country=(value(row, "country") or payload.default_country or "").upper()[:2] or None,
-            city=value(row, "city"),
+            country=country,
+            city=city,
             field_staff=staff,
-            notes=value(row, "notes"),
+            notes=notes,
             source_channel="outbound_mail",
             owner_id=routed.id if routed else user.id,
         )

@@ -203,12 +203,31 @@ missing, on SQLite and Postgres alike. Additive only. It adds columns and never 
 renames, retypes or backfills, and it stops with an error rather than guess at a type it
 does not know. A real change of shape is still a migration somebody writes by hand.
 
+### Importing a prospecting export
+
+The CSV importer reads an Apollo-style export as it comes, because that is the file a rep
+actually has. Three things in `api/transfer.py` do the work. The city and the country are
+read backwards out of a one-line address ("6902 E Adamo Dr, Tampa, Florida, United States,
+33619" is a street, a city, a state, a country and a postcode, and only the city and the
+country have a home here); the state is settled by the file's own state column, with a list
+of states and provinces for a file that has none. The SIC code picks the industry, and so
+the desk, over whatever default the importer was given: `config.SIC_SEGMENT` holds only the
+codes that unambiguously mean one of our six, and anything else falls through rather than
+guessing at a desk. And a header carrying "linkedin" can no longer become the website on a
+file whose only URL column is the LinkedIn page.
+
+What has no column of its own, the SIC code, the revenue and the state, is written into the
+company's notes and labelled as coming from the file, so nobody reads it as something a rep
+found out. Country names are resolved through the live country set first and
+`config.COUNTRY_ALIASES` second; the old code took the first two letters, which filed every
+American company under the country UN.
+
 ## Everything else
 
-Funnel, quotes, clients, reports, CSV import and export, cold mail: unchanged from the
-demo, including the industry colour and name on every row. See that project's README for
-the value model and the funnel.
+Funnel, quotes, clients, reports and cold mail: unchanged from the demo, including the
+industry colour and name on every row. See that project's README for the value model and
+the funnel.
 
 **Cache-bust gotcha:** `index.html` loads `app.js?v=N` and `sabertask.css?v=N`. Bump `N`
 after editing either, or the browser serves the old file. `login.html` carries its own
-copy of the stylesheet link, so bump that one too. Currently `v=18`.
+copy of the stylesheet link, so bump that one too. Currently `v=21`.

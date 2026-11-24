@@ -481,12 +481,20 @@ QUOTE_DEFAULT_TERMS = (
 
 # ------------------------------------------------------------- CSV mapping ---
 IMPORT_MAX_ROWS = 5000
+# The columns the importer reads. `reject` is for a header that would match an
+# alias and mean something else: a prospecting export carries "Company Linkedin
+# Url" next to "Website", and "url" would otherwise make the LinkedIn page the
+# company's website on any file that has no Website column at all.
 IMPORT_FIELDS = [
     {"key": "company_name", "label": "Company name", "aliases": ["company", "organisation", "organization", "name", "bedrijf", "virksomhed"], "required": True},
-    {"key": "website", "label": "Website", "aliases": ["url", "site", "domain"]},
+    {"key": "website", "label": "Website", "aliases": ["url", "site", "domain"], "reject": ["linkedin", "facebook", "twitter", "instagram"]},
     {"key": "country", "label": "Country", "aliases": ["land", "country code"]},
     {"key": "city", "label": "City", "aliases": ["town", "stad", "by"]},
+    {"key": "address", "label": "Address", "aliases": ["company address", "street", "adres", "adresse"]},
+    {"key": "state", "label": "State or province", "aliases": ["company state", "province", "region", "county"]},
     {"key": "segment", "label": "Segment", "aliases": ["industry", "sector", "branche"]},
+    {"key": "sic", "label": "SIC code", "aliases": ["sic code", "sic codes", "naics", "activity code"]},
+    {"key": "revenue", "label": "Annual revenue", "aliases": ["revenue", "turnover", "omzet"]},
     {"key": "field_staff", "label": "Field staff", "aliases": ["employees", "staff", "headcount", "workers"]},
     {"key": "contact_name", "label": "Contact name", "aliases": ["contact", "person", "full name"]},
     {"key": "contact_role", "label": "Contact role", "aliases": ["role", "title", "job title", "function"]},
@@ -494,6 +502,59 @@ IMPORT_FIELDS = [
     {"key": "contact_phone", "label": "Contact phone", "aliases": ["phone", "telephone", "tel", "mobile"]},
     {"key": "notes", "label": "Notes", "aliases": ["note", "comment", "remarks"]},
 ]
+# A country as a prospecting export writes it. The live set is editable from
+# Settings and its own labels are read first, so this is only for the spellings
+# that do not match a label: "USA" for United States, the local name for a
+# country whose label is in English.
+COUNTRY_ALIASES = {
+    "united states": "US", "united states of america": "US", "usa": "US",
+    "u.s.": "US", "u.s.a.": "US", "united kingdom": "GB", "uk": "GB",
+    "canada": "CA", "belgium": "BE", "belgie": "BE", "belgi\u00eb": "BE",
+    "belgique": "BE", "netherlands": "NL", "the netherlands": "NL",
+    "nederland": "NL", "holland": "NL", "denmark": "DK", "danmark": "DK",
+    "norway": "NO", "norge": "NO", "sweden": "SE", "sverige": "SE",
+    "finland": "FI", "suomi": "FI", "germany": "DE", "deutschland": "DE",
+    "france": "FR", "ireland": "IE", "spain": "ES", "italy": "IT",
+}
+
+# States and provinces, so a one-line address can be read without a column
+# saying which part is which. "6902 E Adamo Dr, Tampa, Florida, United States,
+# 33619" is four things and a postcode, and the city is the part this app
+# wants. Only the two markets that write an address that way are listed.
+STATE_NAMES = {
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "district of columbia", "florida", "georgia",
+    "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+    "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota",
+    "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "new hampshire", "new jersey", "new mexico", "new york", "north carolina",
+    "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania",
+    "rhode island", "south carolina", "south dakota", "tennessee", "texas",
+    "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin",
+    "wyoming", "puerto rico",
+    "alberta", "british columbia", "manitoba", "new brunswick",
+    "newfoundland and labrador", "nova scotia", "ontario",
+    "prince edward island", "quebec", "qu\u00e9bec", "saskatchewan",
+}
+
+# The US activity code these exports carry, where it means one of our
+# industries. Only codes that are unambiguous are here: 7349 is building
+# cleaning and maintenance, which is eleven of the twelve ideal clients, and
+# 1542 (nonresidential construction) is deliberately absent because a builder
+# is not a cleaner even when it cleans. Anything not listed falls through to
+# the industry the importer was given, so a wrong desk is never guessed.
+SIC_SEGMENT = {
+    "7349": "cleaning",      # building cleaning and maintenance services, nec
+    "7217": "cleaning",      # carpet and upholstery cleaning
+    "0782": "landscaping",   # lawn and garden services
+    "0783": "landscaping",   # ornamental shrub and tree services
+    "6512": "facility",      # operators of nonresidential buildings
+    "6513": "facility",      # operators of apartment buildings
+    "6531": "facility",      # real estate agents and managers
+}
+# SIC division J, 91 through 97, is public administration whole and entire.
+SIC_PUBLIC_PREFIXES = ("91", "92", "93", "94", "95", "96", "97")
+
 EXPORT_HEADERS = [
     "Email Address", "First Name", "Last Name", "Company", "Country", "City",
     "Segment", "Stage", "Owner", "Tags",

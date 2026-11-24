@@ -1288,7 +1288,9 @@ function taskModal() {
 function importModal() {
   modal('<h3>Import prospects from CSV</h3>'
     + '<div class="hint">Columns are guessed from the header row. Every row becomes a company, a primary '
-    + 'contact and a lead, routed to the rep who owns that industry.</div>'
+    + 'contact and a lead, routed to the rep who owns that industry. A prospecting export works as it '
+    + 'comes: the city and the country are read out of a one-line address, and a SIC code picks the '
+    + 'industry over the one below.</div>'
     + '<div class="body"><div class="field"><label>File</label>'
     + '<input id="i-file" type="file" accept=".csv,text/csv"></div>'
     + '<div class="field"><label>Industry if the file does not say</label>'
