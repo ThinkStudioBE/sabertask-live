@@ -171,6 +171,9 @@ def deal_dict(deal: Deal, company: Optional[Company] = None,
         # The drawer is where a rep judges a prospect, so the site has to be
         # one click away there too, not only on the lead that became it.
         "website": company.website if company else None,
+        # Their CRM's id for this deal, so the drawer can offer a way
+        # straight into HubSpot instead of asking a rep to search for it.
+        "hubspot_id": deal.hubspot_id,
         "segment": company.segment if company else None,
         "segment_label": config.SEGMENT_LABEL.get((company.segment if company else "") or "", ""),
         "segment_short": config.SEGMENT_SHORT.get((company.segment if company else "") or "", ""),

@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from .. import config, settings_store
 from ..auth import current_user
 from ..db import get_session
+from .. import hubspot_sync
 from ..leadfinder import SearchFailed, search
 from ..models import Company, Contact, Deal, Lead, LeadSearch, User
 from ..routing import owner_for_segment
@@ -290,6 +291,12 @@ def _push(session: Session, lead: Lead, user: User) -> Optional[User]:
     lead.status = "added"
     lead.company_id = company.id
     session.commit()
+
+    # Straight into the customer's own CRM, if they connected one. Their reps
+    # live in HubSpot, so a prospect that only exists here is a prospect their
+    # floor will never see. It cannot fail this call: adding a lead works
+    # whether or not HubSpot answers, and a failure is kept on the connection.
+    hubspot_sync.push_quietly(session, deal, lead.score)
     return session.get(User, owner_id)
 
 

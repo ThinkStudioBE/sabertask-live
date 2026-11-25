@@ -68,6 +68,21 @@ function leadCapNote(cap, tail) {
     + (tail || '') + ' The full version has no cap.';
 }
 
+
+/* The same deal in the customer's own CRM.
+
+   Their reps work in HubSpot and this is where the two systems meet on the
+   screen: one click from the prospect here to the record there. The link only
+   appears once that record exists, because a dead link into somebody's CRM is
+   worse than no link. */
+function hubspotLink(hubspotId) {
+  var hs = state.meta && state.meta.hubspot;
+  if (!hubspotId || !hs || !hs.portal_id) return '';
+  return ' <a class="web-link" target="_blank" rel="noopener noreferrer" href="'
+    + 'https://app.hubspot.com/contacts/' + esc(hs.portal_id) + '/deal/'
+    + esc(hubspotId) + '">HubSpot<span class="web-out" aria-hidden="true">\u2197</span></a>';
+}
+
 /* A lead's website, as a link that actually opens.
 
    OpenStreetMap and the business registers both hold the site as people write
@@ -561,6 +576,15 @@ function hubspotPanel() {
           ? '<div class="hs-warn">Last attempt failed: ' + esc(hs.last_error) + '</div>'
           : '')
       + '</div>'
+      + (hs.sync_error
+          ? '<div class="hs-warn">Last sync problem: ' + esc(hs.sync_error) + '</div>'
+          : '')
+      + '<div class="co-sub" style="margin:0 0 12px">A lead added to the '
+      + 'pipeline and a deal that changes stage go across on their own. '
+      + 'Existing companies in your CRM are matched on their website or name '
+      + 'and updated, never duplicated, and a field somebody already filled in '
+      + 'HubSpot is never overwritten.</div>'
+      + '<button class="btn primary sm" data-act="hubspot-sync">Send everything now</button> '
       + '<button class="btn sm" data-act="hubspot-check">Test the connection</button> '
       + '<button class="btn sm" data-act="hubspot-disconnect">Disconnect</button>';
   }
@@ -1110,7 +1134,8 @@ function dealDrawer(payload) {
     + '<span>&middot;</span><span>' + esc(deal.title) + '</span>'
     + '<span>&middot;</span><span>'
     + (deal.website ? webLink(deal.website) + ' ' : '')
-    + mapsLink({ name: deal.company, city: deal.city }) + '</span></div></div>'
+    + mapsLink({ name: deal.company, city: deal.city })
+    + hubspotLink(deal.hubspot_id) + '</span></div></div>'
     + '<button class="btn ghost sm" data-act="close-drawer">Close</button></div>'
     + '<div class="sub" style="margin:12px 0 0;align-items:center">'
     + '<select data-act="stage" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px">'
@@ -1679,6 +1704,16 @@ document.addEventListener('click', function (event) {
     api('/api/hubspot/connect', { method: 'POST' })
       .then(function (data) { window.location.href = data.url; })
       .catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'hubspot-sync') {
+    toast('Sending everything to HubSpot');
+    api('/api/hubspot/sync', { method: 'POST' })
+      .then(function (data) {
+        toast(data.synced + ' in HubSpot'
+          + (data.failed ? ', ' + data.failed + ' failed' : ''));
+        load();
+      }).catch(function (error) { toast(error.message); });
   }
 
   if (act === 'hubspot-check') {

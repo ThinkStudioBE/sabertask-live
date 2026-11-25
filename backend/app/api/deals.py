@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from .. import config
+from .. import config, hubspot_sync
 from ..auth import current_user
 from ..db import get_session
 from ..models import (Client, Company, Contact, Deal, MailDraft, Note, StageEvent,
@@ -393,6 +393,11 @@ def patch_deal(deal_id: int, payload: DealPatch,
 
     if deal.stage == "won":
         client_from_deal(session, deal)
+
+    # Their CRM follows this one. A pipeline that moves here and stands still
+    # in HubSpot is worse than no integration at all: two boards, one of them
+    # quietly wrong, and the rep believes whichever he opened last.
+    hubspot_sync.push_quietly(session, deal)
 
     companies, users, contacts = _lookup(session)
     return deal_dict(deal, companies.get(deal.company_id), users.get(deal.owner_id),

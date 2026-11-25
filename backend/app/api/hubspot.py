@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
-from .. import hubspot
+from .. import hubspot, hubspot_sync
 from ..auth import current_user
 from ..db import get_session
 from ..models import User
@@ -46,6 +46,21 @@ def check(session: Session = Depends(get_session),
     try:
         return hubspot.check()
     except hubspot.HubSpotError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@router.post("/hubspot/sync")
+def sync(session: Session = Depends(get_session),
+         user: User = Depends(current_user)):
+    """Everything here into their CRM in one go: prospects and clients both.
+
+    Used once after connecting, and again whenever somebody wants to be sure
+    the two are level. Day to day nobody presses this: a lead added to the
+    pipeline and a deal that changes stage go across on their own.
+    """
+    try:
+        return hubspot_sync.sync_all(session)
+    except (hubspot_sync.SyncError, hubspot.HubSpotError) as error:
         raise HTTPException(status_code=400, detail=str(error))
 
 

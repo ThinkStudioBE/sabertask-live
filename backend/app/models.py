@@ -57,6 +57,10 @@ class Company(SQLModel, table=True):
     current_tool: Optional[str] = None  # what they run today, the thing we displace
     notes: Optional[str] = None
     owner_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    # The same organisation in the customer's own CRM. Stored rather than
+    # looked up every time, because it is what keeps a second sync from
+    # creating a second company beside the one it made last week.
+    hubspot_id: Optional[str] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
@@ -69,6 +73,7 @@ class Contact(SQLModel, table=True):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_primary: bool = Field(default=False)
+    hubspot_id: Optional[str] = Field(default=None, index=True)
     notes: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
 
@@ -98,6 +103,7 @@ class Deal(SQLModel, table=True):
     contract_months: int = Field(default=12)
     onboarding_fee: float = Field(default=0.0)
 
+    hubspot_id: Optional[str] = Field(default=None, index=True)
     stage: str = Field(default="lead", index=True)
     probability: Optional[int] = None              # override; else the stage default
     channel: str = Field(default="outbound_mail")

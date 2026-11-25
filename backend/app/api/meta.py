@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
-from .. import config, settings_store
+from .. import config, settings_store, hubspot
 from ..auth import current_user
 from ..db import get_session
 from ..models import User
@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api", tags=["meta"])
 @router.get("/meta")
 def meta(session: Session = Depends(get_session), user: User = Depends(current_user)):
     team = session.exec(select(User).where(User.active == True)).all()  # noqa: E712
+    _hubspot_status = hubspot.status()
     return {
         "app": {
             "name": config.APP_NAME,
@@ -24,6 +25,10 @@ def meta(session: Session = Depends(get_session), user: User = Depends(current_u
             "trial_days": config.TRIAL_DAYS,
             "lead_cap_per_country": config.LEAD_CAP_PER_COUNTRY,
         },
+        # Enough to build a link into their CRM, and nothing more: the
+        # tokens live behind /api/hubspot and never travel with meta.
+        "hubspot": {"connected": _hubspot_status.get("connected"),
+                    "portal_id": _hubspot_status.get("portal_id")},
         # Amounts travel in the base currency and are converted where they are
         # drawn, so this block is everything the frontend needs to render money.
         "currency": {

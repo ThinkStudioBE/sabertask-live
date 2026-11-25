@@ -54,6 +54,8 @@ _SQL_TYPE = {
     "FLOAT": {"sqlite": "REAL", "postgres": "DOUBLE PRECISION"},
     "BOOLEAN": {"sqlite": "INTEGER", "postgres": "BOOLEAN"},
     "VARCHAR": {"sqlite": "TEXT", "postgres": "TEXT"},
+    # What SQLModel calls a plain `str` field when no length is given.
+    "AUTOSTRING": {"sqlite": "TEXT", "postgres": "TEXT"},
     "TEXT": {"sqlite": "TEXT", "postgres": "TEXT"},
     "DATE": {"sqlite": "DATE", "postgres": "DATE"},
     "DATETIME": {"sqlite": "DATETIME", "postgres": "TIMESTAMP"},

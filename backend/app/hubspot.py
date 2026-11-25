@@ -51,6 +51,14 @@ SCOPES = [
     "crm.objects.contacts.write",
     "crm.objects.deals.read",
     "crm.objects.deals.write",
+    # To create this integration's own fields in their portal, in their own
+    # group, so a HubSpot user can see which values come from Sabertask and
+    # which are theirs. Without these the sync still works; it simply has
+    # nowhere to write the link back to the record here.
+    "crm.schemas.companies.read",
+    "crm.schemas.companies.write",
+    "crm.schemas.deals.read",
+    "crm.schemas.deals.write",
 ]
 
 # A token is swapped a little before it dies rather than after, so a sync that
@@ -142,6 +150,7 @@ def status() -> dict:
         "connected_by": data.get("connected_by"),
         "scopes": data.get("scopes") or [],
         "last_error": data.get("last_error"),
+        "sync_error": data.get("sync_error"),
     }
 
 
