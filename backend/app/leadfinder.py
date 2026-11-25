@@ -210,10 +210,17 @@ SECTOR_WORDS = {
         "syndic", "gestion immobili", "facilities",
     ],
 }
-# Somewhere to start when the brief names no city, for the countries we happen
-# to know well. This is a convenience and never a gate: a country that is not
-# in here is searched whole, which is what makes a country added from Settings
-# work in the very next search without a line of code.
+# City names worth recognising in a brief when the model that reads it is not
+# available: "cleaning companies in Gent" has to find Gent somehow.
+#
+# These used to double as a starting point when a brief named a country and no
+# city, and that was a mistake. A country is searched whole now. The register
+# is a national index and answers just as fast either way, and the good
+# prospect does not care that it sits in Kortrijk rather than in one of the
+# three cities somebody once typed here: 45 cleaners in a small town is the
+# same deal as 45 cleaners in the capital. On the map it was worse than
+# useless, because asking Oslo returned nothing at all while asking Norway
+# returned everything the map has.
 SEED_CITIES = {
     "BE": ["Antwerpen", "Gent", "Brussel"],
     "NL": ["Rotterdam", "Utrecht", "Amsterdam"],
@@ -788,6 +795,10 @@ def _plan(criteria: dict) -> List[Tuple[Optional[str], List[str]]]:
     """[(country, [city, ...])], where an empty city list means the whole country
     and a country of None means the brief named a city without one.
 
+    A city narrows the search only when the brief asked for one. Name a country
+    and you get the country: a good prospect in a small town is as good as one
+    in the capital, and both sources are indexed nationally anyway.
+
     When the brief gives both, each named city is paired with each named
     country: the query resolves the name inside that country's own boundary and
     comes back empty where it does not exist, so a wrong pairing costs nothing
@@ -800,7 +811,8 @@ def _plan(criteria: dict) -> List[Tuple[Optional[str], List[str]]]:
         return [(code, list(cities)) for code in countries]
     if cities:
         return [(None, list(cities))]
-    return [(code, list(SEED_CITIES.get(code, []))[:MAX_CITIES]) for code in countries]
+    # No city named: the whole country, every town in it included.
+    return [(code, []) for code in countries]
 
 
 def search(brief: str) -> Tuple[dict, List[dict]]:
