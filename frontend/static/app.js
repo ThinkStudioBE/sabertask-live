@@ -503,7 +503,10 @@ function viewCompanies() {
       + '"></div>' + segTag(company) + '</div></td>'
       + '<td><div class="co-name">' + esc(company.name)
       + (company.is_client ? ' <span class="stage-tag won">client</span>' : '') + '</div>'
-      + '<div class="co-sub">' + esc(company.flag) + ' ' + esc(company.city || '') + '</div></td>'
+      + '<div class="co-sub">' + esc(company.flag) + ' ' + esc(company.city || '')
+      + ' <span class="sub-sep">&middot;</span> '
+      + (company.website ? webLink(company.website) + ' <span class="sub-sep">&middot;</span> ' : '')
+      + mapsLink(company) + '</div></td>'
       + '<td>' + (company.field_staff || '-') + '<div class="co-sub">'
       + (company.sites ? company.sites + ' sites' : '') + '</div></td>'
       + '<td style="max-width:180px"><div class="co-sub" style="margin:0">'
@@ -623,6 +626,10 @@ function viewLeads() {
       + esc((r.criteria.segments || []).join(', ')) + ' in '
       + esc((r.criteria.cities || []).join(', '))
       + (r.already_known ? ' &middot; ' + r.already_known + ' already known' : '')
+      + (r.criteria.sites_from_email
+          ? ' &middot; ' + r.criteria.sites_from_email
+            + ' website found behind their mail address'
+          : '')
       + (r.capped
           ? ' &middot; there were more: the trial stops at ' + r.limit
             + ' per country'
@@ -1046,7 +1053,10 @@ function dealDrawer(payload) {
     + '<div class="seg-bar" style="background:' + deal.segment_color + ';min-height:46px"></div>'
     + '<div style="flex:1"><h2>' + esc(deal.company) + '</h2>'
     + '<div class="sub">' + segTag(deal) + '<span>' + esc(deal.flag) + ' ' + esc(deal.city || '') + '</span>'
-    + '<span>&middot;</span><span>' + esc(deal.title) + '</span></div></div>'
+    + '<span>&middot;</span><span>' + esc(deal.title) + '</span>'
+    + '<span>&middot;</span><span>'
+    + (deal.website ? webLink(deal.website) + ' ' : '')
+    + mapsLink({ name: deal.company, city: deal.city }) + '</span></div></div>'
     + '<button class="btn ghost sm" data-act="close-drawer">Close</button></div>'
     + '<div class="sub" style="margin:12px 0 0;align-items:center">'
     + '<select data-act="stage" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px">'
@@ -1249,6 +1259,9 @@ function companyDrawer(payload) {
     + '<dt>Field staff</dt><dd>' + (company.field_staff || '-') + '</dd>'
     + '<dt>Sites</dt><dd>' + (company.sites || '-') + '</dd>'
     + '<dt>Runs today</dt><dd>' + esc(company.current_tool || '-') + '</dd>'
+    + '<dt>Website</dt><dd>'
+    + (company.website ? webLink(company.website) : 'none on file')
+    + ' <span class="sub-sep">&middot;</span> ' + mapsLink(company) + '</dd>'
     + '<dt>Owner</dt><dd>' + esc(company.owner ? company.owner.name : '') + '</dd>'
     + '</dl><div style="margin-top:16px;line-height:1.65">' + esc(company.notes || '') + '</div>'
     + '<button class="btn primary sm" data-act="new-deal-for" data-company="' + company.id
@@ -1492,6 +1505,11 @@ function moveStage(dealId, stage) {
 /* --------------------------------------------------------------- handlers */
 
 document.addEventListener('click', function (event) {
+  // A row opens a drawer, and some rows carry a link to the prospect's own
+  // site. Without this the link opened the drawer as well, so the rep got a
+  // new tab and a drawer he did not ask for, on top of each other.
+  if (event.target.closest('a[href]')) return;
+
   var target = event.target.closest('[data-nav],[data-act],[data-seg],[data-view],[data-tab],'
     + '[data-deal],[data-company],[data-client],[data-complete],[data-open-deal],'
     + '[data-search]');

@@ -12,6 +12,7 @@ from ..auth import current_user
 from ..db import get_session
 from ..models import Client, Company, Contact, Deal, User
 from ..routing import owner_for_segment
+from ..leadfinder import site_url
 from ..serializers import company_dict, contact_dict, deal_dict, deal_mrr
 
 router = APIRouter(prefix="/api", tags=["companies"])
@@ -122,6 +123,9 @@ def create_company(payload: CompanyIn, session: Session = Depends(get_session),
         raise HTTPException(status_code=400, detail="A name is required")
     company = Company(**payload.dict())
     company.name = name
+    # Typed by hand, so it arrives as "www.foo.be" as often as not, and an
+    # address without a scheme is a link that points back at us.
+    company.website = site_url(company.website)
     if company.owner_id is None:
         routed = owner_for_segment(session, company.segment)
         company.owner_id = routed.id if routed else user.id
@@ -159,6 +163,8 @@ def patch_company(company_id: int, payload: CompanyPatch,
     reroute = explicit.pop("reroute", False)
     for field, value in explicit.items():
         setattr(company, field, value)
+    if "website" in explicit:
+        company.website = site_url(company.website)
 
     # Moving a company to another industry moves it to that industry's rep,
     # unless the caller named an owner in the same breath.

@@ -38,6 +38,7 @@ import os
 import re
 import subprocess
 import time
+from concurrent import futures
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -687,6 +688,102 @@ def site_url(value: Optional[str]) -> Optional[str]:
     return "https://" + value.lstrip("/")
 
 
+# Mailboxes that say nothing about a website: everybody's provider, not the
+# company's own domain.
+FREE_MAIL = {
+    "gmail.com", "googlemail.com", "hotmail.com", "hotmail.be", "hotmail.fr",
+    "hotmail.nl", "hotmail.dk", "hotmail.no", "hotmail.se", "outlook.com",
+    "outlook.be", "outlook.dk", "live.be", "live.com", "live.nl", "live.dk",
+    "yahoo.com", "yahoo.fr", "icloud.com", "me.com", "msn.com", "aol.com",
+    "gmx.com", "gmx.net", "gmx.de", "proton.me", "protonmail.com", "mail.com",
+    "telenet.be", "skynet.be", "proximus.be", "scarlet.be", "base.be",
+    "belgacom.net", "pandora.be", "voo.be", "edpnet.be", "chello.be",
+    "ziggo.nl", "kpnmail.nl", "planet.nl", "online.nl", "home.nl", "xs4all.nl",
+    "mail.dk", "post.dk", "online.no", "broadpark.no", "telia.com",
+    "bredband.net", "elisanet.fi", "luukku.com",
+}
+
+# How long one site check may take, and how many a single search may run. The
+# checks are the only thing here that touches a prospect's own server, so they
+# are deliberately few, short and parallel: a search must not get slower
+# because a register row happens to carry a mailbox.
+SITE_CHECK_TIMEOUT = 4.0
+SITE_CHECK_CAP = 30
+SITE_CHECK_WORKERS = 8
+
+
+def _site_from_email(email: Optional[str]) -> Optional[str]:
+    """The domain a company reads its mail on, as a website to try.
+
+    A mailbox on your own domain is the strongest free hint there is that the
+    domain carries a site: the register knows the mail address of far more
+    companies than it knows the website of. It stays a hint, which is why
+    nothing is stored until the domain answers.
+    """
+    email = (email or "").strip().lower()
+    if "@" not in email:
+        return None
+    domain = email.rsplit("@", 1)[-1].strip(" .<>")
+    if not domain or "." not in domain or domain in FREE_MAIL:
+        return None
+    return "https://" + domain
+
+
+def _site_answers(url: str) -> Optional[str]:
+    """The address that actually answers, or None.
+
+    A 403 or a 404 counts. Both mean a web server picked up the phone: small
+    firms sit behind bot protection that refuses us and serves the rep fine,
+    and a root that 404s still has pages. Only a connection that goes nowhere
+    means there is no site, and that is checked on www as well, because plenty
+    of small sites answer there and nowhere else.
+    """
+    tries = [url]
+    host = url.split("//", 1)[-1]
+    if not host.startswith("www."):
+        tries.append("https://www." + host)
+    for candidate in tries:
+        try:
+            with httpx.Client(timeout=SITE_CHECK_TIMEOUT, follow_redirects=True,
+                              headers={"User-Agent": USER_AGENT}) as client:
+                response = client.get(candidate)
+        except httpx.HTTPError:
+            continue
+        final = str(response.url)
+        match = re.match(r"(https?://[^/]+)", final)
+        return match.group(1) if match else candidate
+    return None
+
+
+def fill_missing_sites(leads: List[dict]) -> int:
+    """Give every lead without a website the one its mail domain points at.
+
+    Scoring happens again for whatever is filled, because a website is worth
+    twenty points: a lead that has one should rank like a lead that has one,
+    whether the register said so or its own mail address did.
+    """
+    todo = []
+    for lead in leads:
+        if lead.get("website"):
+            continue
+        guess = _site_from_email(lead.get("email"))
+        if guess:
+            todo.append((lead, guess))
+        if len(todo) >= SITE_CHECK_CAP:
+            break
+    if not todo:
+        return 0
+
+    filled = 0
+    with futures.ThreadPoolExecutor(max_workers=SITE_CHECK_WORKERS) as pool:
+        for (lead, _), answer in zip(todo, pool.map(lambda pair: _site_answers(pair[1]), todo)):
+            if answer:
+                lead["website"] = answer
+                lead["score"] = _score(lead)
+                filled += 1
+    return filled
+
+
 def _plan(criteria: dict) -> List[Tuple[Optional[str], List[str]]]:
     """[(country, [city, ...])], where an empty city list means the whole country
     and a country of None means the brief named a city without one.
@@ -833,6 +930,10 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
     # the same prospect at all: seats are per person in the field, so where the
     # size is known it breaks the tie, and where it is not the lead keeps its
     # place rather than dropping below everything that happens to have a number.
+    # Before sorting, because a website is worth twenty points and a lead that
+    # only ever had a mail address would otherwise rank below what it is.
+    criteria["sites_from_email"] = fill_missing_sites(leads)
+
     leads.sort(key=lambda row: (-row["score"], -(row.get("field_staff") or 0)))
     return criteria, leads
 
