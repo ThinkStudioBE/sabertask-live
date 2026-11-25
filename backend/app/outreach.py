@@ -68,7 +68,9 @@ def _greeting(contact_name: Optional[str]) -> str:
     # have; when in doubt the whole string is used, which always reads correctly.
     lowered = name.lower()
     # A placeholder is not a person and must never be greeted as one.
-    if any(word in lowered for word in ("contact", "team", "office", "info")):
+    desks = ("contact", "team", "office", "info", "sales", "service", "support",
+             "admin", "mailbox", "desk", "enquiries", "inquiries", "reception")
+    if any(word in lowered for word in desks):
         return "there"
     first = name.split()[0]
     if first.lower() in ("manager", "director", "head", "ict-projectleider", "ict"):
@@ -148,15 +150,25 @@ SYSTEM = (
     "tasks, photo documentation) and a web dashboard for the office (planning, "
     "shifts, quality reports, invoicing from the same data). It is sold per user "
     "per month on three role tiers and starts with a 30-day trial of everything.\n\n"
-    "Rules. Write to one named reader, in English, under 160 words. Use the "
-    "reader's name exactly as you are given it, with no Mr, Ms or any title you "
-    "would have to guess at. Open with "
+    "Rules. Write in English, under 160 words. Use the reader's name exactly as "
+    "you are given it, with no Mr, Ms or any title you would have to guess at. "
+    "When the facts say you are writing to a shared mailbox rather than to a "
+    "person, open with 'Hello,' on its own line and nothing more: name the "
+    "company in the first sentence instead. Never invent an addressee, a job "
+    "title or a department to greet, and never write 'To the operations lead' "
+    "or 'To whoever runs'. Open with "
     "something true about their operation from the facts you are given, never "
     "with a compliment or a question about their day. Name the one thing their "
     "sector loses time or money on, then what changes. No bullet lists, no bold, "
     "no exclamation marks, no 'I hope this finds you well', no 'revolutionise', "
     "no 'solution'. Ask for twenty minutes, not for a yes. Invent nothing: if a "
     "number is not in the facts, leave it out.\n\n"
+    "The subject line: under eight words, and never built on the headcount. Do "
+    "not begin it with a figure, and avoid the 'N cleaners, one record of the "
+    "work' shape: every company on this desk has a crew and a city, so those "
+    "subjects all come out looking like one mail merge. Point at something only "
+    "this company would recognise: where they work, the kind of building they "
+    "keep, or the argument they are having with a client today.\n\n"
     "Answer with the subject on the first line as 'Subject: ...', then a blank "
     "line, then the mail, ending with the sender's name and title."
 )
@@ -202,7 +214,12 @@ def claude_draft(facts: dict) -> Optional[Tuple[str, str]]:
         "People in the field: " + str(facts["field_staff"]),
         "Sites served: " + str(facts["sites"]),
         "What they run today: " + (facts["current_tool"] or "not known, do not guess"),
-        "Writing to: " + (facts["contact_name"] or "no named contact, address the role"),
+        # `greeting` is "there" exactly when the addressee is a desk rather
+        # than a person, which is what an info@ or sales@ mailbox is. Naming
+        # it as a mailbox stops the model inventing somebody to greet.
+        "Writing to: " + (facts["contact_name"]
+                          if facts["contact_name"] and facts["greeting"] != "there"
+                          else "a shared mailbox, not a person"),
         "Seats we would start with: " + str(facts["seats"]),
         "Sender: " + facts["rep_name"] + ", " + facts["rep_title"],
     ]
