@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from .. import config, settings_store
+from ..leadfinder import site_url
 from ..auth import current_user
 from ..db import get_session
 from ..models import Client, Company, Contact, Deal, StageEvent, User
@@ -266,7 +267,7 @@ def commit(payload: CommitIn, session: Session = Depends(get_session),
         routed = owner_for_segment(session, segment)
         company = Company(
             name=name,
-            website=value(row, "website"),
+            website=site_url(value(row, "website")),
             segment=segment,
             country=country,
             city=city,

@@ -472,6 +472,14 @@ MAIL_STAGES = ["lead", "contacted", "nurture"]
 # not a setting, so it cannot be raised from the dashboard or by a deployment.
 # Enforced in the Overpass query, one query per country so the limit binds per
 # country, and again as a clamp in the endpoint in case a mirror ignores it.
+#
+# The screens present this as a limit of the trial, because that is what it is
+# to whoever is being sold the product (frontend: leadCapNote). Worth knowing
+# before anybody promises an uncapped version: raising this number alone does
+# not deliver one. The free map is both the reason for the ceiling and the
+# reason there is little above it, so an uncapped search needs a source that is
+# paid for per record: a prospecting export, a places API, or a register where
+# the country has one.
 LEAD_CAP_PER_COUNTRY = 50
 
 QUOTE_PREFIX = "ST"

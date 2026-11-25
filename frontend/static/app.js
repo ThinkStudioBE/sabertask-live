@@ -37,6 +37,41 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
+/* The 50-per-country ceiling, said the way it should be read: a limit of this
+   trial, not of the product. One place, because it is claimed on three screens
+   and a promise that reads differently in two of them is worse than no promise.
+
+   What the number actually protects is in config.LEAD_CAP_PER_COUNTRY: the open
+   map is run by volunteers and a search that pulls thousands of rows is a bad
+   neighbour. Lifting it for real means a paid source, not a bigger number. */
+function leadCapNote(cap, tail) {
+  return 'This trial returns at most ' + (cap || 50) + ' leads per country, '
+    + (tail || '') + ' The full version has no cap.';
+}
+
+/* A lead's website, as a link that actually opens.
+
+   OpenStreetMap and the business registers both hold the site as people write
+   it on a van: "www.anccom.be/", "clean-wise.be". Put that straight into an
+   href and the browser reads it as a path on OUR host, so the rep clicks the
+   site of a prospect and lands on our own login screen. That is the whole bug:
+   the link was there, it just pointed inward. Everything stored without a
+   scheme gets https:// here, at the last possible moment, so old rows work
+   without touching what is in the database.
+
+   The label is the bare domain, because the rep is scanning a column and
+   "https://www." in front of fifty rows tells him nothing. */
+function webLink(url, extra) {
+  if (!url) return '';
+  var full = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+  var label = String(url).replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+    .replace(/\/+$/, '');
+  return '<a class="web-link" href="' + esc(full) + '" target="_blank"'
+    + ' rel="noopener noreferrer" title="' + esc(full) + '">'
+    + esc(label) + '<span class="web-out" aria-hidden="true">\u2197</span></a>'
+    + (extra || '');
+}
+
 /* Every amount the API sends is in the base currency. It is converted here, at
    the last possible moment, so switching what you read the pipeline in never
    touches what is stored or what anybody else sees. */
@@ -482,9 +517,11 @@ function viewSettings() {
     + '<h3 style="margin:0 0 4px">Countries to search</h3>'
     + '<div class="co-sub" style="margin-bottom:14px">A search looks only in '
     + 'these. Add one and it works straight away, no restart and nothing to '
-    + 'deploy. A search returns at most ' + data.lead_cap_per_country
-    + ' leads per country, counted over every industry in that search, so the '
-    + 'total grows with the number of countries you pick.</div>'
+    + 'deploy. '
+    + leadCapNote(data.lead_cap_per_country,
+        'counted over every industry in that search, so the total grows with '
+        + 'the number of countries you pick.')
+    + '</div>'
     + '<div class="set-chips">';
   data.countries.forEach(function (row) {
     html += '<span class="set-chip">' + esc(row.flag) + ' ' + esc(row.label)
@@ -558,8 +595,9 @@ function viewLeads() {
     + '</div>'
     + '<div class="co-sub">Name an industry and a city or a country. '
     + 'Countries with an official business register are searched there and the '
-    + 'rest off the open map. A search returns at most ' + (data.cap_per_country || 50)
-    + ' leads per country, across all industries in that search.</div>';
+    + 'rest off the open map. '
+    + leadCapNote(data.cap_per_country, 'across all industries in that search.')
+    + '</div>';
   if (state.leadResult) {
     var r = state.leadResult;
     html += '<div class="lead-result">' + r.shown + ' on the list for '
@@ -567,7 +605,8 @@ function viewLeads() {
       + esc((r.criteria.cities || []).join(', '))
       + (r.already_known ? ' &middot; ' + r.already_known + ' already known' : '')
       + (r.capped
-          ? ' &middot; there were more, this run stopped at ' + r.limit + ' per country'
+          ? ' &middot; there were more: the trial stops at ' + r.limit
+            + ' per country'
           : '')
       + ((r.skipped && r.skipped.length)
           ? ' &middot; not reached in time: ' + esc(r.skipped.join(', '))
@@ -634,10 +673,9 @@ function viewLeads() {
       + '<td><div class="seg-cell"><div class="seg-stripe" style="background:'
       + row.segment_color + '"></div>' + segTag(row) + '</div></td>'
       + '<td><div class="co-name">' + esc(row.name) + '</div>'
-      + '<div class="co-sub">' + (row.website
-          ? '<a href="' + esc(row.website) + '" target="_blank" rel="noopener noreferrer">'
-            + esc(row.website.replace(/^https?:\/\//, '')) + '</a>'
-          : 'no website on file') + '</div></td>'
+      + '<div class="co-sub">'
+      + (row.website ? webLink(row.website) : 'no website on file')
+      + '</div></td>'
       + '<td>' + esc(row.flag) + ' ' + esc(row.city || '')
       + '<div class="co-sub">' + esc(row.street || '') + '</div></td>'
       + '<td>' + (row.field_staff ? row.field_staff : '-')

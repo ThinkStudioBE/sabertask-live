@@ -643,3 +643,20 @@ button.set-chip.on { border-color: var(--brand); background: var(--brand-50);
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* The website of a lead is the one thing a rep clicks before judging the fit,
+   so it has to look clickable among grey sub-lines and be big enough to hit. */
+.web-link {
+  color: var(--brand);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding: 1px 0;
+}
+.web-link:hover {
+  border-bottom-color: var(--brand);
+}
+.web-out {
+  font-size: 10px;
+  margin-left: 3px;
+  opacity: .6;
+}

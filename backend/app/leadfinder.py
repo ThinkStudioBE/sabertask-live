@@ -669,6 +669,24 @@ def _clean(value: Optional[str]) -> Optional[str]:
     return value[:300] or None
 
 
+def site_url(value: Optional[str]) -> Optional[str]:
+    """A website stored the way it can be opened.
+
+    Both sources hold the site as it is painted on a van: "www.anccom.be/",
+    "clean-wise.be". Without a scheme a browser reads that as a path on
+    whatever host it is already on, so the link points back at us instead of at
+    the prospect. The scheme is added once, here, on the way in.
+    """
+    value = _clean(value)
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+    if value.startswith("//"):
+        return "https:" + value
+    return "https://" + value.lstrip("/")
+
+
 def _plan(criteria: dict) -> List[Tuple[Optional[str], List[str]]]:
     """[(country, [city, ...])], where an empty city list means the whole country
     and a country of None means the brief named a city without one.
@@ -842,7 +860,7 @@ def _from_register(row: dict) -> dict:
         "country": row.get("country"),
         "city": _clean(row.get("city")),
         "street": _clean(row.get("street")),
-        "website": _clean(row.get("website")),
+        "website": site_url(row.get("website")),
         "phone": _clean(row.get("phone")),
         "email": _clean(row.get("email")),
         "field_staff": row.get("field_staff"),
@@ -877,7 +895,7 @@ def _from_element(element: dict, code: str, criteria: dict,
         "country": country,
         "city": _clean(tags_on.get("addr:city")),
         "street": street,
-        "website": _clean(tags_on.get("website") or tags_on.get("contact:website")),
+        "website": site_url(tags_on.get("website") or tags_on.get("contact:website")),
         "phone": _clean(tags_on.get("phone") or tags_on.get("contact:phone")),
         "email": _clean(tags_on.get("email") or tags_on.get("contact:email")),
         "field_staff": None,
