@@ -191,6 +191,11 @@ def _segment_of(code: str, value: str) -> str:
 
 # --------------------------------------------------------------------- Norway ---
 
+# How many pages of a hundred a single register question may walk. The cap
+# decides when to stop; this is the backstop for a register that keeps handing
+# out full pages, so one search can never turn into a crawl.
+PAGE_LIMIT = 10
+
 BRREG_URL = "https://data.brreg.no/enhetsregisteret/api/enheter"
 BRREG_KOMMUNER = "https://data.brreg.no/enhetsregisteret/api/kommuner"
 _kommuner: Dict[str, str] = {}
@@ -232,12 +237,19 @@ def _norway(segments: List[str], cities: List[str], cap: int) -> List[dict]:
             # largest employer in a municipality is the largest deal in it, and
             # without this the register answers alphabetically: fifty companies
             # whose names begin with a digit.
-            params = {"naeringskode": code, "size": min(cap, 100),
-                      "sort": "antallAnsatte,DESC"}
-            if place:
-                params["kommunenummer"] = place
-            payload = _get_json(BRREG_URL, params)
-            rows = (payload.get("_embedded") or {}).get("enheter") or []
+            page = 0
+            rows = []
+            while page < PAGE_LIMIT and len(leads) + len(rows) < cap:
+                params = {"naeringskode": code, "size": 100, "page": page,
+                          "sort": "antallAnsatte,DESC"}
+                if place:
+                    params["kommunenummer"] = place
+                payload = _get_json(BRREG_URL, params)
+                batch = (payload.get("_embedded") or {}).get("enheter") or []
+                rows.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
             for row in rows:
                 if len(leads) >= cap:
                     return leads
@@ -280,11 +292,19 @@ def _finland(segments: List[str], cities: List[str], cap: int) -> List[dict]:
         for place in places:
             if len(leads) >= cap:
                 return leads
-            params = {"mainBusinessLine": code}
-            if place:
-                params["location"] = place
-            payload = _get_json(PRH_URL, params)
-            for row in payload.get("companies") or []:
+            page = 1
+            rows = []
+            while page <= PAGE_LIMIT and len(leads) + len(rows) < cap:
+                params = {"mainBusinessLine": code, "page": page}
+                if place:
+                    params["location"] = place
+                payload = _get_json(PRH_URL, params)
+                batch = payload.get("companies") or []
+                rows.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+            for row in rows:
                 if len(leads) >= cap:
                     return leads
                 number = ((row.get("businessId") or {}).get("value") or "")

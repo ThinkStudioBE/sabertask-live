@@ -462,7 +462,7 @@ MAIL_STAGES = ["lead", "contacted", "nurture"]
 
 # ------------------------------------------------------------------ leads ---
 # The ceiling on one search, per country, counted over every industry in that
-# search together. Three countries in one brief can therefore return 150 leads
+# search together. Three countries in one brief can therefore return 750 leads
 # and the total grows with the set, which is the user's own decision: there is
 # deliberately no overall ceiling on top of it.
 #
@@ -480,7 +480,7 @@ MAIL_STAGES = ["lead", "contacted", "nurture"]
 # reason there is little above it, so an uncapped search needs a source that is
 # paid for per record: a prospecting export, a places API, or a register where
 # the country has one.
-LEAD_CAP_PER_COUNTRY = 50
+LEAD_CAP_PER_COUNTRY = 250
 
 QUOTE_PREFIX = "ST"
 QUOTE_VALID_DAYS = 30

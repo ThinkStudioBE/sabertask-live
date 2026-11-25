@@ -236,6 +236,30 @@ SEED_CITIES = {
     "CA": ["Toronto", "Montreal", "Calgary"],
 }
 
+# Countries nobody can ask in one question. A single query for the whole of the
+# United States times out on every mirror there is, measured, while the same
+# query for Florida comes back in half a minute with more businesses than three
+# metro areas ever gave. So these two are asked a state at a time, biggest
+# economies first, until the cap or the budget runs out. Everywhere else the
+# country goes in one question, which is both faster and complete.
+REGIONS = {
+    "US": ["California", "Texas", "Florida", "New York", "Pennsylvania",
+           "Illinois", "Ohio", "Georgia", "North Carolina", "Michigan",
+           "New Jersey", "Virginia", "Washington", "Arizona", "Massachusetts",
+           "Tennessee", "Indiana", "Maryland", "Missouri", "Wisconsin",
+           "Colorado", "Minnesota", "South Carolina", "Alabama", "Louisiana",
+           "Kentucky", "Oregon", "Oklahoma", "Connecticut", "Utah", "Iowa",
+           "Nevada", "Arkansas", "Mississippi", "Kansas", "New Mexico",
+           "Nebraska", "Idaho", "West Virginia", "Hawaii", "New Hampshire",
+           "Maine", "Montana", "Rhode Island", "Delaware", "South Dakota",
+           "North Dakota", "Alaska", "Vermont", "Wyoming"],
+    "CA": ["Ontario", "Quebec", "British Columbia", "Alberta", "Manitoba",
+           "Saskatchewan", "Nova Scotia", "New Brunswick",
+           "Newfoundland and Labrador", "Prince Edward Island",
+           "Northwest Territories", "Yukon", "Nunavut"],
+}
+
+
 PLACE_TYPES = ("city", "town", "municipality", "village", "suburb")
 
 
@@ -435,10 +459,15 @@ def _query(tags: List[str], country: str, cities: List[str],
     for index, city in enumerate(cities or []):
         name = city.replace('"', "")
         scope = "a_" + str(index)
-        # admin_level 6 to 10 covers city, municipality, borough and district
-        # across the markets this runs in, which do not agree on a number.
+        # admin_level 4 to 10 covers the state or province as well as the
+        # city, municipality, borough and district, because the markets do not
+        # agree on a number and because the United States and Canada are
+        # searched a state at a time: fifty states of leads is a different
+        # thing from one country's worth. A name that is both a city and a
+        # state, New York being the obvious one, matches both and the search
+        # keeps the two together, which is the answer a rep wanted anyway.
         lines.append('rel(area.' + area + ')["name"="' + name + '"]'
-                     '["admin_level"~"^(6|7|8|9|10)$"];')
+                     '["admin_level"~"^(4|5|6|7|8|9|10)$"];')
         lines.append("map_to_area->." + scope + ";")
         scopes.append(scope)
 
@@ -910,12 +939,30 @@ def search(brief: str) -> Tuple[dict, List[dict]]:
                 if time.time() > deadline:
                     skipped.append(code)
                     continue
-                try:
-                    elements = _overpass(
-                        _query(tags, code, cities_by_country[code],
-                               segments=criteria["segments"]))
-                except SearchFailed as error:
-                    failure = error
+                # One question for a country, unless the country is one of the
+                # two that cannot be asked at once: then one per state, in
+                # order, for as long as there is budget and room under the cap.
+                named = cities_by_country[code]
+                asks = ([named] if named
+                        else [[region] for region in REGIONS[code]] if code in REGIONS
+                        else [[]])
+                elements = []
+                answered = False
+                for ask in asks:
+                    if answered and (time.time() > deadline or len(elements) >= cap):
+                        break
+                    try:
+                        elements.extend(_overpass(
+                            _query(tags, code, ask, segments=criteria["segments"])))
+                        answered = True
+                    except SearchFailed as error:
+                        failure = error
+                        # One state refusing is not the map refusing. But once
+                        # every mirror has gone quiet there is nothing to be
+                        # gained by walking the other forty-nine.
+                        if len(asks) == 1 or map_is_down():
+                            break
+                if not answered:
                     skipped.append(code)
                     continue
                 sources[code] = "map"
