@@ -482,6 +482,24 @@ MAIL_STAGES = ["lead", "contacted", "nurture"]
 # the country has one.
 LEAD_CAP_PER_COUNTRY = 250
 
+# ---------------------------------------------------------------- HubSpot ---
+# The customer connects their own HubSpot from the Settings screen. That needs
+# an app on our side, once: a HubSpot developer account, an app in it, and its
+# two keys here. They are deliberately env vars and deliberately not in the
+# repository, because the secret is what lets this app ask for access to
+# somebody's CRM.
+#
+# The redirect URL registered on that app must be exactly
+# <PUBLIC_URL>/api/hubspot/callback, or HubSpot refuses the round trip with a
+# mismatch that says nothing useful.
+HUBSPOT_CLIENT_ID = os.getenv("HUBSPOT_CLIENT_ID", "")
+HUBSPOT_CLIENT_SECRET = os.getenv("HUBSPOT_CLIENT_SECRET", "")
+
+# Where this installation answers, as the outside world reaches it. Only the
+# OAuth round trip needs it, and only because the address has to match what is
+# registered on the app to the character.
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://sabertask-live.think-studio.com")
+
 QUOTE_PREFIX = "ST"
 QUOTE_VALID_DAYS = 30
 

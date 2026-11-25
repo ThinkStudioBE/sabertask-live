@@ -23,6 +23,10 @@ from .models import User
 
 PUBLIC_PATHS = {
     "/login", "/api/login", "/api/logout", "/api/health",
+    # HubSpot sends the customer back here after the consent screen. A stale
+    # session must not cost them an authorisation they already granted; what
+    # proves the round trip is the signed state, checked inside the route.
+    "/api/hubspot/callback", "/api/hubspot/callback/",
     "/favicon.svg", "/sabertask.css", "/assets/sabertask-logo.png", "/robots.txt",
 }
 # Quote pages sit behind the login too. A real deployment would want them

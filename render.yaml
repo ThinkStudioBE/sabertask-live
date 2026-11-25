@@ -41,6 +41,16 @@ services:
       # reason is printed once per draft in the service log.
       - key: ANTHROPIC_API_KEY
         sync: false
+      # The customer connects their own HubSpot from the Settings screen, and
+      # that needs an app on our side: a HubSpot developer account, an app in
+      # it, and these two keys. The redirect URL on that app must be exactly
+      # https://sabertask-live.think-studio.com/api/hubspot/callback. Without
+      # them the Settings screen says the connection is not available yet
+      # rather than showing a button that cannot work.
+      - key: HUBSPOT_CLIENT_ID
+        sync: false
+      - key: HUBSPOT_CLIENT_SECRET
+        sync: false
       # Postgres. Everything the app learns lives here rather than on the
       # container, which is thrown away on every restart. Paste the Neon
       # connection string in the Render dashboard.

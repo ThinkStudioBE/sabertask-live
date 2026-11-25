@@ -80,6 +80,19 @@ def _store(key: str, value) -> None:
     _cache_until = 0.0
 
 
+def get(key: str, default=None):
+    """One stored setting, or the default. For settings that are a block of
+    their own rather than a list the whole app reads, like the connection to a
+    customer's CRM."""
+    value = _read().get(key)
+    return default if value is None else value
+
+
+def put(key: str, value) -> None:
+    """Store one setting and drop the cache, so the next read sees it."""
+    _store(key, value)
+
+
 # ---------------------------------------------------------------- countries ---
 
 def countries() -> List[dict]:

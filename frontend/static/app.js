@@ -524,6 +524,58 @@ function viewCompanies() {
 
 /* --------------------------------------------------------------- SETTINGS */
 
+/* The customer's own CRM, connected by the customer.
+
+   Nobody here ever signs in to a customer's HubSpot. They press Connect, say
+   yes on HubSpot's own screen, and come back. Three states and each one says
+   what to do next: no app keys on this installation, keys but no portal, or
+   connected and worth testing, because a customer can revoke this from their
+   side and a stored connection looks exactly like a live one until somebody
+   asks. */
+function hubspotPanel() {
+  var hs = state.data.hubspot;
+  if (!hs) return '';
+
+  var body;
+  if (!hs.configured) {
+    body = '<div class="hs-state off"><strong>Not available yet</strong>'
+      + '<div class="co-sub">This installation has no HubSpot app keys. '
+      + 'Whoever runs it sets HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET, '
+      + 'and the button below starts working.</div></div>'
+      + '<button class="btn primary" disabled>Connect HubSpot</button>';
+  } else if (!hs.connected) {
+    body = '<div class="hs-state off"><strong>Not connected</strong>'
+      + '<div class="co-sub">Press connect, sign in to HubSpot and say yes. '
+      + 'HubSpot asks you to pick the account, so nothing here can reach a '
+      + 'portal you did not choose.</div></div>'
+      + '<button class="btn primary" data-act="hubspot-connect">Connect HubSpot</button>';
+  } else {
+    body = '<div class="hs-state on"><strong>Connected'
+      + (hs.account ? ' to ' + esc(hs.account) : '') + '</strong>'
+      + '<div class="co-sub">'
+      + (hs.portal_id ? 'Portal ' + esc(hs.portal_id) + ' &middot; ' : '')
+      + (hs.connected_at ? 'since ' + esc(String(hs.connected_at).slice(0, 10)) : '')
+      + (hs.connected_by ? ' &middot; by ' + esc(hs.connected_by) : '')
+      + '</div>'
+      + (hs.last_error
+          ? '<div class="hs-warn">Last attempt failed: ' + esc(hs.last_error) + '</div>'
+          : '')
+      + '</div>'
+      + '<button class="btn sm" data-act="hubspot-check">Test the connection</button> '
+      + '<button class="btn sm" data-act="hubspot-disconnect">Disconnect</button>';
+  }
+
+  return '<div class="panel" style="margin-bottom:14px">'
+    + '<h3 style="margin:0 0 4px">HubSpot</h3>'
+    + '<div class="co-sub" style="margin-bottom:14px">Your own HubSpot, '
+    + 'connected by you. Sabertask never signs in to your account: HubSpot '
+    + 'asks your permission and you can withdraw it there at any time, under '
+    + 'Connected Apps.</div>'
+    + body + '</div>';
+}
+
+
+
 /* Two settings, and they are different kinds of thing. The countries belong to
    the installation and decide where a search may look: add one here and the
    next search can use it, which is the point. The currency belongs to the
@@ -534,6 +586,8 @@ function viewSettings() {
   var cur = data.currency;
 
   var html = '<div class="view">';
+
+  html += hubspotPanel();
 
   html += '<div class="panel" style="margin-bottom:14px">'
     + '<h3 style="margin:0 0 4px">Countries to search</h3>'
@@ -1420,6 +1474,7 @@ function load() {
   }
   if (state.nav === 'settings') {
     jobs.push(api('/api/settings').then(function (data) { state.data.settings = data; }));
+    jobs.push(api('/api/hubspot').then(function (data) { state.data.hubspot = data; }));
   }
   if (state.nav === 'reports') {
     jobs.push(api('/api/reports').then(function (data) { state.data.reports = data; }));
@@ -1615,6 +1670,31 @@ document.addEventListener('click', function (event) {
   if (act === 'country-remove') {
     api('/api/settings/countries/' + target.dataset.code, { method: 'DELETE' })
       .then(function () { toast('Removed from the search'); return refreshMeta(); })
+      .catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'hubspot-connect') {
+    // A full page move, not a popup: HubSpot's consent screen is where the
+    // customer signs in, and a blocked popup would read as a broken button.
+    api('/api/hubspot/connect', { method: 'POST' })
+      .then(function (data) { window.location.href = data.url; })
+      .catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'hubspot-check') {
+    toast('Asking HubSpot');
+    api('/api/hubspot/check', { method: 'POST' })
+      .then(function (data) {
+        toast('Connected to ' + (data.account || ('portal ' + data.portal_id)));
+        load();
+      }).catch(function (error) { toast(error.message); });
+  }
+
+  if (act === 'hubspot-disconnect') {
+    if (!window.confirm('Disconnect HubSpot? Nothing will be sent to your CRM '
+        + 'until somebody connects it again.')) return;
+    api('/api/hubspot/disconnect', { method: 'POST' })
+      .then(function () { toast('HubSpot disconnected'); load(); })
       .catch(function (error) { toast(error.message); });
   }
 

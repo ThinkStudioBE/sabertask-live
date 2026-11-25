@@ -664,3 +664,19 @@ button.set-chip.on { border-color: var(--brand); background: var(--brand-50);
 /* Between the website and the map link: present enough to separate them, quiet
    enough not to be read as a bullet list. */
 .sub-sep { opacity: .45; }
+
+/* The HubSpot connection block. Its whole job is to make the difference
+   between connected and not connected readable from across a desk. */
+.hs-state {
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 12px;
+  margin-bottom: 14px;
+}
+.hs-state.on { border-left-color: #1f9d55; }
+.hs-state.off { border-left-color: var(--brand-mid); }
+.hs-state strong { display: block; margin-bottom: 2px; }
+.hs-warn {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #b23c3c;
+}

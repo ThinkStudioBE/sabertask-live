@@ -12,7 +12,7 @@ from . import config
 from .auth import AuthMiddleware, authenticate, make_session_cookie
 from .db import get_session, init_db
 from .api import (
-    clients, companies, deals, leads, mail, meta, quotes, reports, settings,
+    clients, companies, deals, hubspot, leads, mail, meta, quotes, reports, settings,
     tasks, transfer,
 )
 from .seed import seed_if_empty, sync_passwords
@@ -91,6 +91,7 @@ app.include_router(quotes.router)
 app.include_router(reports.router)
 app.include_router(settings.router)
 app.include_router(transfer.router)
+app.include_router(hubspot.router)
 
 
 @app.get("/login", response_class=HTMLResponse)
