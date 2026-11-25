@@ -660,3 +660,7 @@ button.set-chip.on { border-color: var(--brand); background: var(--brand-50);
   margin-left: 3px;
   opacity: .6;
 }
+
+/* Between the website and the map link: present enough to separate them, quiet
+   enough not to be read as a bullet list. */
+.sub-sep { opacity: .45; }

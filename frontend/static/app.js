@@ -37,6 +37,25 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
+/* The same lead on Google Maps.
+
+   For a quarter of the leads the register holds no website, and for some of
+   those there is nothing to hold: a small cleaning firm with a van and a
+   Facebook page. The map listing is where the rest of it lives, opening hours,
+   photos, reviews and often the site the register never got, so this is the
+   second place to look before judging a fit.
+
+   A plain search URL, no key and no API: name, street and city, which is
+   enough to land on the right listing and harmless when it is not. */
+function mapsLink(row) {
+  var parts = [row.name, row.street, row.city].filter(function (bit) { return bit; });
+  var query = encodeURIComponent(parts.join(', '));
+  return '<a class="web-link" href="https://www.google.com/maps/search/?api=1&amp;query='
+    + query + '" target="_blank" rel="noopener noreferrer"'
+    + ' title="Look this one up on Google Maps">Maps'
+    + '<span class="web-out" aria-hidden="true">\u2197</span></a>';
+}
+
 /* The 50-per-country ceiling, said the way it should be read: a limit of this
    trial, not of the product. One place, because it is claimed on three screens
    and a promise that reads differently in two of them is worse than no promise.
@@ -675,6 +694,7 @@ function viewLeads() {
       + '<td><div class="co-name">' + esc(row.name) + '</div>'
       + '<div class="co-sub">'
       + (row.website ? webLink(row.website) : 'no website on file')
+      + ' <span class="sub-sep">&middot;</span> ' + mapsLink(row)
       + '</div></td>'
       + '<td>' + esc(row.flag) + ' ' + esc(row.city || '')
       + '<div class="co-sub">' + esc(row.street || '') + '</div></td>'
