@@ -221,7 +221,18 @@ function segProfiles() {
     + '<div class="seg-profiles-head">Who we are looking for</div>'
     + (ideal && ideal.note
         ? '<div class="seg-profiles-ideal">' + esc(ideal.note)
-          + '<span>' + esc(ideal.source || '') + '</span></div>'
+          + '<span>' + esc(ideal.source || '') + '</span>'
+          // The customers the profile was read off. They are named here and
+          // nowhere else in the app: they are not prospects and must never
+          // turn up in a pipeline or a mail queue.
+          + ((ideal.examples || []).length
+              ? '<span class="seg-profiles-eg">Read off: '
+                + ideal.examples.map(function (eg) {
+                    return esc(eg[0]) + ' (' + esc(eg[1]) + ', ' + eg[2] + ')';
+                  }).join(' &middot; ')
+                + '</span>'
+              : '')
+          + '</div>'
         : '')
     + state.meta.segments.filter(function (seg) { return seg.profile; })
         .map(function (seg) {

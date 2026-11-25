@@ -319,10 +319,30 @@ IDEAL_CLIENT = {
     "staff_min": 12,
     "staff_max": 45,
     "segments": ["cleaning", "facility"],
-    "source": "twelve ideal clients named by Sabertask, Florida, 2026-11-24",
+    "source": "twelve of Sabertask's own customers, Florida, given 2026-11-24",
     "note": "12 to 45 people in the field, contract cleaning or building "
             "services, whatever the name on the van says. Seven of the twelve "
             "trade as \"facility\" something and still do janitorial work.",
+    # These twelve are CUSTOMERS, not prospects. Sabertask handed them over as
+    # the shape to look for, which is why they are written down here rather than
+    # loaded into the pipeline: a customer sitting in the mail queue is one
+    # misclick away from being sold the product they already pay for. They were
+    # in the pipeline once, on 2026-11-24, and were taken out again on
+    # 2026-11-25 before anything was sent.
+    "examples": [
+        ("Pro Housekeepers", "Tampa", 27),
+        ("GBC Facility Services", "Miami", 25),
+        ("Hero Facility Services", "Melbourne", 45),
+        ("Cristal Clear Cleaning", "Jacksonville", 21),
+        ("Office Pride Commercial Cleaning of Pensacola", "Pensacola", 21),
+        ("Total Facility Solutions", "Miami", 13),
+        ("ProFi Construction & Maintenance", "Fort Lauderdale", 34),
+        ("General Facility Care", "Tampa", 13),
+        ("WeClean Commercial Cleaning", "Coconut Creek", 13),
+        ("Clean Slate Janitorial Services", "Orlando", 12),
+        ("American Cleaning Services", "Orlando", 40),
+        ("Service Keepers Maintenance", "Miami", 32),
+    ],
 }
 
 def flag_for(code):

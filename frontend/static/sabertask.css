@@ -632,3 +632,14 @@ button.set-chip.on { border-color: var(--brand); background: var(--brand-50);
 .set-inp { padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px;
            background: #fff; outline: none; font-size: 13px; max-width: 220px; }
 .set-inp:focus { border-color: var(--brand-mid); }
+
+/* The customers the ideal-client profile was read off: present so nobody has
+   to guess later where 12 to 45 people came from, quiet so it never competes
+   with the leads on the screen. */
+.seg-profiles-eg {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
